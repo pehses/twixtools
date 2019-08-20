@@ -101,7 +101,7 @@ class Mdb_base(object):
         self.mdh['aulEvalInfoMask'][1] = 0
 
     def get_myflags(self):
-        flags = self.get_flags().copy()
+        flags = self.get_flags()
         # del flags[None]
 
         # set flag for skope sync scans
@@ -110,7 +110,8 @@ class Mdb_base(object):
         # we add another flag for imascans (just to simplify stuff later on)
         flags['IMASCAN'] = True
 
-        if flags['RTFEEDBACK'] or flags['HPFEEDBACK']\
+        if flags['ACQEND'] or flags['SYNCDATA']\
+                or flags['RTFEEDBACK'] or flags['HPFEEDBACK']\
                 or flags['PHASCOR'] or flags['NOISEADJSCAN']\
                 or flags['SKOPE_SYNCSCAN']:
             flags['IMASCAN'] = False

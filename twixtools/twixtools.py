@@ -5,7 +5,7 @@ import numpy as np
 
 from twixtools.twixprot import twixprot, parse_twix_hdr
 from twixtools.helpers import idea_version_check, update_progress
-from twixtools.mdb import Mdb
+from twixtools.mdb import Mdb, Mdb_base
 
 
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=False):
@@ -68,7 +68,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=False):
             fid.seek(pos, os.SEEK_SET)
             hdr = parse_twix_hdr(fid)
             out[-1]['prot'] = prot
-            # out[-1]['hdr'] = hdr
+            out[-1]['hdr'] = hdr
 
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos
@@ -97,3 +97,22 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=False):
     # fid.close()
 
     return out
+
+
+def write_header(hdr, fid, mdb_bytesize):
+    pass
+
+
+def write_twix(scanlist, outfile):
+    if type(scanlist) == dict:
+        scanlist = [scanlist]
+    with open(outfile, 'xb') as fid:
+        for scan in scanlist:
+            mdb_bytesize = 0
+            for mdb in scan['mdb']:
+                if issubclass(type(mdb), Mdb_base):
+                    bytesize += 0 #wip
+            write_header(scan['hdr'], fid, mdb_bytesize)
+            for mdb in scan['mdb']:
+                if issubclass(type(mdb), Mdb_base):
+                    mdb.write_to_file(fid)

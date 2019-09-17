@@ -1,2 +1,2 @@
-from twixtools.twixtools import read_twix
+from .twixtools import read_twix
 

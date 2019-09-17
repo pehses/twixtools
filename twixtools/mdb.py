@@ -152,6 +152,9 @@ class Mdb_base(object):
             value = int(time+0.5)
         self.mdh["ulPMUTimeStamp"] = value
 
+    def write_to_file(self, fid):
+        pass
+
 
 class Mdb_local(Mdb_base):
 

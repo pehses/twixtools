@@ -6,9 +6,10 @@ import numpy as np
 from twixtools.twixprot import twixprot, parse_twix_hdr
 from twixtools.helpers import idea_version_check, update_progress
 from twixtools.mdb import Mdb, Mdb_base
+from twixtools.hdr_def import MultiRaidFileHeader, SingleMeasInit
 
 
-def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=False):
+def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
     """Function for reading siemens twix raw data files."""
     if isinstance(infile, str):
         # assume that complete path is given
@@ -34,18 +35,19 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=False):
     fileSize = np.uint64(fid.tell())
     version_is_ve, NScans = idea_version_check(fid)
 
+    out = list()
     # lazy software version check (VB or VD?)
     if version_is_ve:
         print('Software version: VD/VE (!?)')
-        fid.seek(8, os.SEEK_SET)  # move pos to 9th byte in file
-        measID, fileID = np.fromfile(fid, dtype=np.uint32, count=2)
+        fid.seek(0, os.SEEK_SET)  # move pos to 9th byte in file
+        raidfile_hdr = np.fromfile(fid, dtype=MultiRaidFileHeader, count=1)[0]
+        out.append(raidfile_hdr)
+        NScans = raidfile_hdr["hdr"]["count_"]
         measOffset = list()
         measLength = list()
-        for _ in range(NScans):
-            offset, length = np.fromfile(fid, dtype=np.uint64, count=2)
-            measOffset.append(offset)
-            measLength.append(length)
-            fid.seek(152 - 16, os.SEEK_CUR)
+        for k in range(NScans):
+            measOffset.append(raidfile_hdr['entry'][k]['off_'])
+            measLength.append(raidfile_hdr['entry'][k]['len_'])
     else:
         # in VB versions, the first 4 bytes indicate the beginning of the
         # raw data part of the file
@@ -54,21 +56,24 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=False):
         measOffset = [np.uint64(0)]
         measLength = [fileSize]
 
-    out = list()
     for s in range(NScans):
         scanStart = measOffset[s]
         scanEnd = scanStart + measLength[s]
         pos = measOffset[s]
         fid.seek(pos, os.SEEK_SET)
-        hdr_len = np.fromfile(fid, dtype=np.uint32, count=1)[0]
+        meas_init = np.fromfile(fid, dtype=SingleMeasInit, count=1)[0]
+        hdr_len = meas_init["hdr_len"]
         out.append(dict())
-        out[-1]['mdb'] = list()
         if read_prot:
-            prot = twixprot(fid, hdr_len, version_is_ve)
             fid.seek(pos, os.SEEK_SET)
             hdr = parse_twix_hdr(fid)
-            out[-1]['prot'] = prot
+            out[-1]['init'] = meas_init
             out[-1]['hdr'] = hdr
+            fid.seek(pos, os.SEEK_SET)
+            out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
+            # prot = twixprot(fid, hdr_len, version_is_ve)
+            # out[-1]['prot'] = prot
+        out[-1]['mdb'] = list()
 
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos
@@ -99,20 +104,89 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=False):
     return out
 
 
-def write_header(hdr, fid, mdb_bytesize):
-    pass
+do_not_zfp_compress = ['SYNCDATA', 'ACQEND']
+do_not_remove_os = ['SYNCDATA', 'ACQEND', '__fidnav___']
+do_not_scc_compress = ['SYNCDATA', 'ACQEND', 'RTFEEDBACK']
+do_not_gcc_compress = ['SYNCDATA', 'ACQEND', 'RTFEEDBACK', 'NOISEADJSCAN', '__fidnav___']
+#'REFLECT'
 
+def write_twix(scanlist, outfile, version_is_ve=True):
+    
+    def write_sync_bytes(fid):
+        syncbytes = (512-(fid.tell())%512)%512
+        fid.write(b'\x00' * syncbytes)
 
-def write_twix(scanlist, outfile):
-    if type(scanlist) == dict:
+    if isinstance(scanlist, dict):
         scanlist = [scanlist]
+
     with open(outfile, 'xb') as fid:
-        for scan in scanlist:
-            mdb_bytesize = 0
+        if version_is_ve:
+            # allocate space for multi-header
+            fid.write(b'\x00' * 10240)
+        
+        scan_pos = list()
+        scan_len = list()
+        for key, scan in enumerate(scanlist):
+            
+            if not isinstance(scan, dict):
+                continue
+
+            # keep track of byte pos
+            scan_pos.append(fid.tell())
+
+            # write header
+            scan['hdr_str'].tofile(fid)
+
+            acq_end_len = 0
+
+            # write mdbs
             for mdb in scan['mdb']:
-                if issubclass(type(mdb), Mdb_base):
-                    bytesize += 0 #wip
-            write_header(scan['hdr'], fid, mdb_bytesize)
-            for mdb in scan['mdb']:
-                if issubclass(type(mdb), Mdb_base):
-                    mdb.write_to_file(fid)
+                # write mdh
+                mdb.mdh.tofile(fid)
+                data = np.atleast_2d(mdb.data)
+                if version_is_ve:
+                    if mdb.is_flag_set('SYNCDATA'):
+                        data.tofile(fid)
+                    elif mdb.is_flag_set('ACQEND'):
+                        data.tofile(fid)
+                        acq_end_len = 192
+                    else:
+                        for c in range(data.shape[0]):
+                            #write channel header
+                            mdb.channel_hdr[c].tofile(fid)
+                            # write data
+                            data[c].tofile(fid)
+                else: # WIP: VB version
+                    mdb.mdh.tofile(fid)
+                    # write data
+                    data[c].tofile(fid)
+
+            # update scan_len
+            scan_len.append(fid.tell() - scan_pos[-1] - acq_end_len)
+
+            # add sync bytes between scans
+            write_sync_bytes(fid)
+
+        # now write preallocated MultiRaidFileHeader
+        if version_is_ve:
+            n_scans = len(scan_pos)
+            if isinstance(scanlist[0], np.void):
+                # we have a template
+                multi_header = scanlist[0].copy()
+            else:
+                # start from scratch
+                multi_header = np.zeros(1, dtype=MultiRaidFileHeader)[0]
+                for k in range(n_scans):
+                    multi_header['entry']['patName_'] = b'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+                    multi_header['entry']['protName_'] = b'noname'
+
+            # write NScans
+            multi_header['hdr']['count_'] = n_scans
+            # write scan_pos & scan_len for each scan
+            for i, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
+                multi_header['entry'][i]['len_'] = len_
+                multi_header['entry'][i]['off_'] = pos_
+                
+            # write MultiRaidFileHeader
+            fid.seek(0)
+            multi_header.tofile(fid)

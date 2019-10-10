@@ -150,11 +150,11 @@ def parse_twix_hdr(file):
     import numpy as np
     hdr_len, n_buffer = np.fromfile(file, dtype=np.uint32, count=2)
     xprotocol = dict()
-    pattern = b'(\w*)\x00(.{4})'
+    pattern = b'(\w{4,})\x00(.{4})'
     pos = file.tell()
     for b in range(n_buffer):
-        tmp = file.read(32)
-        matches = re.search(pattern, tmp)
+        tmp = file.read(48)
+        matches = re.search(pattern, tmp, re.DOTALL)
         name = matches.group(1).decode('latin1')
         buf_len = struct.unpack('<I', matches.group(2))[0]
         pos += len(matches.group())

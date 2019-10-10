@@ -36,8 +36,8 @@ class Mdb_base(object):
             if self.is_flag_set('ACQEND'):
                 # jump to next full 512 bytes
                 pos_after_mdb = self.mem_pos + dma_len
-                if pos_after_mdb%512:
-                    dma_len += np.uint32(512 - pos_after_mdb%512)
+                # add sync bytes 
+                pos_after_mdb += np.uint32((512-pos_after_mdb %512)%512)
             return dma_len
 
         # override value found in 'ulFlagsAndDMALength' which is sometimes
@@ -213,6 +213,8 @@ class Mdb(Mdb_base):
         self.mem_pos = self.fid.tell()
         if self.version_is_ve:
             self.mdh = np.fromfile(self.fid, dtype=scan_hdr_type, count=1)[0]
+            if self.mem_pos < 1e6:
+                print(self.mdh)
             if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
                 for c in range(self.mdh['ushUsedChannels']):
                     chan_hd = np.fromfile(self.fid, dtype=channel_hdr_type, count=1)[0]
@@ -235,9 +237,12 @@ class Mdb(Mdb_base):
         
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
             # channel header is in this case assumed to be part of 'data'
+            dma_len_ = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
             if not self.version_is_ve:
                 self.fid.seek(vb17_hdr_type.itemsize, os.SEEK_CUR)
-            out = np.fromfile(self.fid, dtype=np.uint8, count=self.dma_len-skip_bytes)
+            elif self.is_flag_set('SYNCDATA'):
+                dma_len_ -= scan_hdr_type.itemsize
+            out = np.fromfile(self.fid, dtype='<S1', count=dma_len_)
         else:
             dt = np.dtype([('skip', bytes, skip_bytes), ('data', np.complex64, self.mdh['ushSamplesInScan'])])
             out = np.fromfile(self.fid, dtype=dt, count=self.mdh['ushUsedChannels'])['data']

@@ -98,7 +98,7 @@ scan_hdr_type = np.dtype(scan_header)
 channel_hdr_type = np.dtype(channel_header)
 
 
-mask_id = [None] * 64
+mask_id = ['noname%d'%(k) for k in range (64)]
 mask_id[0] = 'ACQEND'  # last scan
 mask_id[1] = 'RTFEEDBACK'  # Realtime feedback scan
 mask_id[2] = 'HPFEEDBACK'  # High perfomance feedback scan

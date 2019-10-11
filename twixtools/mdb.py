@@ -213,8 +213,6 @@ class Mdb(Mdb_base):
         self.mem_pos = self.fid.tell()
         if self.version_is_ve:
             self.mdh = np.fromfile(self.fid, dtype=scan_hdr_type, count=1)[0]
-            if self.mem_pos < 1e6:
-                print(self.mdh)
             if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
                 for c in range(self.mdh['ushUsedChannels']):
                     chan_hd = np.fromfile(self.fid, dtype=channel_hdr_type, count=1)[0]

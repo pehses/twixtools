@@ -2,7 +2,7 @@ import numpy as np
 import ctypes
 import os
 
-from twixtools.mdh_def import vb17_hdr_type, scan_hdr_type, channel_hdr_type, mask_id
+import twixtools.mdh_def as mdh_def
 
 
 def unpack_bits(infomask):
@@ -15,10 +15,10 @@ class Mdb_base(object):
     def __init__(self, version_is_ve=True):
         self.version_is_ve = version_is_ve
         if self.version_is_ve:
-            self.mdh = np.zeros(1, dtype=scan_hdr_type)[0]
+            self.mdh = np.zeros(1, dtype=mdh_def.scan_hdr_type)[0]
             self.channel_hdr = list()
         else:
-            self.mdh = np.zeros(1, dtype=vb17_hdr_type)
+            self.mdh = np.zeros(1, dtype=mdh_def.vb17_hdr_type)
             self.channel_hdr = None
 
     def _get_data_len(self):
@@ -26,25 +26,20 @@ class Mdb_base(object):
 
     def _get_block_len(self):
         if self.version_is_ve:
-            return np.uint32(self.data_len + channel_hdr_type.itemsize)
+            return np.uint32(self.data_len + mdh_def.channel_hdr_type.itemsize)
         else:
-            return np.uint32(self.data_len + vb17_hdr_type.itemsize)
+            return np.uint32(self.data_len + mdh_def.vb17_hdr_type.itemsize)
     
     def _get_dma_len(self):
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
             dma_len = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
-            if self.is_flag_set('ACQEND'):
-                # jump to next full 512 bytes
-                pos_after_mdb = self.mem_pos + dma_len
-                # add sync bytes 
-                pos_after_mdb += np.uint32((512-pos_after_mdb %512)%512)
             return dma_len
 
         # override value found in 'ulFlagsAndDMALength' which is sometimes
         # not quite correct (e.g. in case PackBit is set)
         out = self.mdh['ushUsedChannels'] * self.block_len
         if self.version_is_ve:
-            out += scan_hdr_type.itemsize
+            out += mdh_def.scan_hdr_type.itemsize
         return np.uint32(out)
 
     data_len = property(_get_data_len)
@@ -53,7 +48,7 @@ class Mdb_base(object):
 
     def is_flag_set(self, flag):
         mask = self.mdh['aulEvalInfoMask']
-        bit = mask_id.index(flag)
+        bit = mdh_def.mask_id.index(flag)
         if bit<32:
             return bool(mask[0] & (1 << bit))
         else:
@@ -69,14 +64,14 @@ class Mdb_base(object):
             self.remove_flag(flag)
 
     def add_flag(self, flag):
-        bit = mask_id.index(flag)
+        bit = mdh_def.mask_id.index(flag)
         if bit<32:
             self.mdh['aulEvalInfoMask'][0] |= (1 << bit)
         else:
             self.mdh['aulEvalInfoMask'][1] |= (1 << bit-32)
 
     def remove_flag(self, flag):
-        bit = mask_id.index(flag)
+        bit = mdh_def.mask_id.index(flag)
         if bit<32:
             self.mdh['aulEvalInfoMask'][0] &= ~(1 << bit)
         else:
@@ -84,7 +79,7 @@ class Mdb_base(object):
 
     def get_flags(self):
         mask = unpack_bits(self.mdh['aulEvalInfoMask'])
-        return dict(zip(mask_id, mask))
+        return dict(zip(mdh_def.mask_id, mask))
     
     def set_flags(self, flags): 
         if isinstance(flags, list):
@@ -185,7 +180,7 @@ class Mdb_local(Mdb_base):
             ##self.mdh["ulFlagsAndDMALength"] # set packbit to zero and dma len to expected len (self.dma_len)
         if self.version_is_ve:
             if self.channel_hdr is None or len(self.channel_hdr)<ncha:
-                self.channel_hdr = [np.zeros(1, dtype=channel_hdr_type)]
+                self.channel_hdr = [np.zeros(1, dtype=mdh_def.channel_hdr_type)]
             for c in range(ncha):
                 if c>=len(self.channel_hdr):
                     self.channel_hdr.append(self.channel_hdr[0])
@@ -212,14 +207,14 @@ class Mdb(Mdb_base):
             return ValueError
         self.mem_pos = self.fid.tell()
         if self.version_is_ve:
-            self.mdh = np.fromfile(self.fid, dtype=scan_hdr_type, count=1)[0]
+            self.mdh = np.fromfile(self.fid, dtype=mdh_def.scan_hdr_type, count=1)[0]
             if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
                 for c in range(self.mdh['ushUsedChannels']):
-                    chan_hd = np.fromfile(self.fid, dtype=channel_hdr_type, count=1)[0]
+                    chan_hd = np.fromfile(self.fid, dtype=mdh_def.channel_hdr_type, count=1)[0]
                     self.channel_hdr.append(chan_hd)
                     self.fid.seek(self.data_len, os.SEEK_CUR)
         else:
-            self.mdh = np.fromfile(self.fid, dtype=vb17_hdr_type, count=1)[0]
+            self.mdh = np.fromfile(self.fid, dtype=mdh_def.vb17_hdr_type, count=1)[0]
 
     def __get_data(self):
         was_closed = self.fid.closed
@@ -228,18 +223,18 @@ class Mdb(Mdb_base):
             self.fid = open(self.fid.name, self.fid.mode)
         self.fid.seek(self.mem_pos)
         if self.version_is_ve:
-            self.fid.seek(scan_hdr_type.itemsize, os.SEEK_CUR)
-            skip_bytes = channel_hdr_type.itemsize
+            self.fid.seek(mdh_def.scan_hdr_type.itemsize, os.SEEK_CUR)
+            skip_bytes = mdh_def.channel_hdr_type.itemsize
         else:
-            skip_bytes = vb17_hdr_type.itemsize
+            skip_bytes = mdh_def.vb17_hdr_type.itemsize
         
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
             # channel header is in this case assumed to be part of 'data'
             dma_len_ = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
             if not self.version_is_ve:
-                self.fid.seek(vb17_hdr_type.itemsize, os.SEEK_CUR)
+                self.fid.seek(mdh_def.vb17_hdr_type.itemsize, os.SEEK_CUR)
             elif self.is_flag_set('SYNCDATA'):
-                dma_len_ -= scan_hdr_type.itemsize
+                dma_len_ -= mdh_def.scan_hdr_type.itemsize
             out = np.fromfile(self.fid, dtype='<S1', count=dma_len_)
         else:
             dt = np.dtype([('skip', bytes, skip_bytes), ('data', np.complex64, self.mdh['ushSamplesInScan'])])

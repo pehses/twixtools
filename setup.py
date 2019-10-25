@@ -65,5 +65,6 @@ setup(name='twixtools',
       url='',
       license='',
       packages=['twixtools'],
+      scripts=['twixtools/twixzip.py'],
       zip_safe=False,
       )

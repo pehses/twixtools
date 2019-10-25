@@ -154,3 +154,75 @@ mask_id[55] = 'SKIP_REGRIDDING'  # Marks scans not to be regridded
 mask_id[61] = 'WIP_1'  # Mark scans for WIP application "type 1"
 mask_id[62] = 'WIP_2'  # Mark scans for WIP application "type 1"
 mask_id[63] = 'WIP_3'  # Mark scans for WIP application "type 1"
+
+
+# helper function (copied from mdb class)
+
+def unpack_bits(infomask):
+    # numpy's unpackbits does not work correctly for some reason
+    infomask = infomask.view(np.uint64)[0]
+    return np.bitwise_and(infomask, 2**np.arange(8*infomask.nbytes)).astype(bool)
+
+
+def is_flag_set(mdh, flag):
+        mask = mdh['aulEvalInfoMask']
+        bit = mask_id.index(flag)
+        if bit<32:
+            return bool(mask[0] & (1 << bit))
+        else:
+            return bool(mask[1] & (1 << bit-32))
+
+def get_flag(mdh, flag):
+    return is_flag_set(mdh, flag)
+
+def set_flag(mdh, flag, val):
+    if val:
+        add_flag(mdh, flag)
+    else:
+        remove_flag(mdh, flag)
+
+def add_flag(mdh, flag):
+    bit = mask_id.index(flag)
+    if bit<32:
+        mdh['aulEvalInfoMask'][0] |= (1 << bit)
+    else:
+        mdh['aulEvalInfoMask'][1] |= (1 << bit-32)
+
+def remove_flag(mdh, flag):
+    bit = mask_id.index(flag)
+    if bit<32:
+        mdh['aulEvalInfoMask'][0] &= ~(1 << bit)
+    else:
+        mdh['aulEvalInfoMask'][1] &= ~(1 << bit-32)
+
+def get_flags(mdh):
+    mask = unpack_bits(mdh['aulEvalInfoMask'])
+    return dict(zip(mask_id, mask))
+
+def get_active_flags(mdh):
+    return [key for key,item in get_flags(mdh).items() if item] 
+
+def set_flags(mdh, flags): 
+    if isinstance(flags, list):
+        for key in flags:
+            set_flag(mdh, key, True)
+    elif isinstance(flags, dict):
+        for key, item in flags:
+            set_flag(mdh, key, item)
+    else:
+        raise ValueError
+
+def clear_all_flags(mdh):
+    mdh['aulEvalInfoMask'][0] = 0
+    mdh['aulEvalInfoMask'][1] = 0
+
+
+def is_image_scan(mdh):
+    disqualifier = ['ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN', 'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60']
+    for name in disqualifier:
+        if is_flag_set(mdh, name):
+            return False
+    # check for patref scan
+    if is_flag_set(mdh, 'PATREFSCAN') and not is_flag_set(mdh, 'PATREFANDIMASCAN'):
+        return False
+    return True

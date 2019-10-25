@@ -3,10 +3,11 @@ import os
 import re
 import numpy as np
 
-from twixtools.twixprot import twixprot, parse_twix_hdr
-from twixtools.helpers import idea_version_check, update_progress
-from twixtools.mdb import Mdb, Mdb_base
-from twixtools.hdr_def import MultiRaidFileHeader, SingleMeasInit
+
+import twixtools.twixprot as twixprot
+import twixtools.helpers as helpers
+import twixtools.mdb
+import twixtools.hdr_def as hdr_def
 
 
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
@@ -33,14 +34,14 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
     fid = open(infile, 'rb')
     fid.seek(0, os.SEEK_END)
     fileSize = np.uint64(fid.tell())
-    version_is_ve, NScans = idea_version_check(fid)
+    version_is_ve, NScans = helpers.idea_version_check(fid)
 
     out = list()
     # lazy software version check (VB or VD?)
     if version_is_ve:
         print('Software version: VD/VE (!?)')
         fid.seek(0, os.SEEK_SET)  # move pos to 9th byte in file
-        raidfile_hdr = np.fromfile(fid, dtype=MultiRaidFileHeader, count=1)[0]
+        raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader, count=1)[0]
         out.append(raidfile_hdr)
         NScans = raidfile_hdr["hdr"]["count_"]
         measOffset = list()
@@ -61,12 +62,12 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
         scanEnd = scanStart + measLength[s]
         pos = measOffset[s]
         fid.seek(pos, os.SEEK_SET)
-        meas_init = np.fromfile(fid, dtype=SingleMeasInit, count=1)[0]
+        meas_init = np.fromfile(fid, dtype=hdr_def.SingleMeasInit, count=1)[0]
         hdr_len = meas_init["hdr_len"]
         out.append(dict())
         if read_prot:
             fid.seek(pos, os.SEEK_SET)
-            hdr = parse_twix_hdr(fid)
+            hdr = twixprot.parse_twix_hdr(fid)
             out[-1]['init'] = meas_init
             out[-1]['hdr'] = hdr
             fid.seek(pos, os.SEEK_SET)
@@ -78,11 +79,11 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos
         print('\nscan ', s)
-        update_progress(pos - scanStart, scanEnd - scanStart, True)
+        helpers.update_progress(pos - scanStart, scanEnd - scanStart, True)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
-            update_progress(pos - scanStart, scanEnd - scanStart, False)
+            helpers.update_progress(pos - scanStart, scanEnd - scanStart, False)
             fid.seek(pos, os.SEEK_SET)
-            mdb = Mdb(fid, version_is_ve)
+            mdb = twixtools.mdb.Mdb(fid, version_is_ve)
 
             # jump to mdh of next scan
             pos += mdb.dma_len

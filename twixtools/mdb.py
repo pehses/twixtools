@@ -81,6 +81,9 @@ class Mdb_base(object):
         mask = unpack_bits(self.mdh['aulEvalInfoMask'])
         return dict(zip(mdh_def.mask_id, mask))
     
+    def get_active_flags(self):
+        return [key for key,item in self.get_flags().items() if item] 
+
     def set_flags(self, flags): 
         if isinstance(flags, list):
             for key in flags:
@@ -233,8 +236,7 @@ class Mdb(Mdb_base):
             dma_len_ = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
             if not self.version_is_ve:
                 self.fid.seek(mdh_def.vb17_hdr_type.itemsize, os.SEEK_CUR)
-            elif self.is_flag_set('SYNCDATA'):
-                dma_len_ -= mdh_def.scan_hdr_type.itemsize
+            dma_len_ -= mdh_def.scan_hdr_type.itemsize
             out = np.fromfile(self.fid, dtype='<S1', count=dma_len_)
         else:
             dt = np.dtype([('skip', bytes, skip_bytes), ('data', np.complex64, self.mdh['ushSamplesInScan'])])

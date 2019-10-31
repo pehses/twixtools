@@ -58,7 +58,6 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None):
         nc, nx = data.shape
         ncc = mtx.shape[1]
         if cc_mode == 'scc':
-            
             data = mtx[0] @ data
         elif cc_mode == 'gcc':
             if nx!=mtx.shape[0]:
@@ -71,10 +70,10 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None):
                 data = data[:ncc,:]
 
     data, x_in_timedomain = to_timedomain(data, x_in_timedomain)
-
+    
     if reflect_data:
         data = data[:,::-1]
-    
+
     return np.complex64(data), rm_os_active, cc_active
 
 
@@ -83,17 +82,20 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
     if data.dtype == np.dtype("S1"):
         return data # nothing to do in case of bytearray
     
+    if inv_mtx is None:
+        inv_mtx = False
+
     nc, nx = data.shape
+
     x_in_timedomain = True
-    
+    reflect_data = False
     if remove_os or cc_mode=='gcc':
+        # for performance reasons, x dim was stored in freq. domain
         reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
         if reflect_data:
             data = data[:,::-1]
-    else:
-        reflect_data = False
     
-    if cc_mode and inv_mtx is not None:
+    if cc_mode:
         nc = inv_mtx.shape[1]
         ncc = inv_mtx.shape[-1]
         if cc_mode=='scc':
@@ -133,9 +135,9 @@ def create_restriction_categories(cc_mode=False):
     if cc_mode is not None and cc_mode is not False:
         restriction_categories['NO_COILCOMP'] = set()
         # restriction_categories['NO_COILCOMP'].add('RAWDATACORRECTION')
-        if cc_mode == 'gcc':
-            restriction_categories['NO_COILCOMP'].add('NOISEADJSCAN')
-            restriction_categories['NO_COILCOMP'].add('noname60') # our own fidnav scan
+        # if cc_mode == 'gcc': # only disable for gcc? (scc should in principle be able to handle noise data!?)
+        restriction_categories['NO_COILCOMP'].add('NOISEADJSCAN')
+        restriction_categories['NO_COILCOMP'].add('noname60') # our own fidnav scan
     else:
         restriction_categories['NO_COILCOMP'] = ''
     print(restriction_categories)
@@ -157,11 +159,32 @@ def get_restrictions(mdh_flags, restriction_categories):
     return restrictions, data_category
 
 
+def calculate_prewhitening(noise, scale_factor=1.0):
+    '''Calculates the noise prewhitening matrix
+
+    :param noise: Input noise data (array or matrix), ``[coil, nsamples]``
+    :scale_factor: Applied on the noise covariance matrix. Used to
+                   adjust for effective noise bandwith and difference in
+                   sampling rate between noise calibration and actual measurement:
+                   scale_factor = (T_acq_dwell/T_noise_dwell)*NoiseReceiverBandwidthRatio
+
+    :returns w: Prewhitening matrix, ``[coil, coil]``, w*data is prewhitened
+    '''
+
+    noise_int = noise.reshape((noise.shape[0], -1))
+    M = float(noise_int.shape[1])
+    dmtx = (1/(M-1))*(noise_int.dot(np.conj(noise_int).T))
+    mtx = np.linalg.cholesky(dmtx)/np.sqrt(2*scale_factor)
+    dmtx = np.linalg.inv(mtx)
+    return dmtx, mtx
+
+
 def scc_calibrate_mtx(data):
     [ny, nc, nx] = np.shape(data)
     data = np.moveaxis(data,1,-1)
     data = data.flatten().reshape((-1, nc))
     U, s, V = np.linalg.svd(data, full_matrices=False)
+    V = np.conj(V)
     return V[np.newaxis, :, :], s
 
 
@@ -173,7 +196,7 @@ def gcc_calibrate_mtx(data):
     s = np.zeros(nc, dtype='float32')
     for x in range(nx):
         U, s_, V = np.linalg.svd(im[:,x,:], full_matrices=False)
-        mtx[x,:,:] = V
+        mtx[x,:,:] = np.conj(V)
         s += s_
     return mtx, s
 
@@ -200,6 +223,7 @@ def get_cal_data(meas, cc_mode, remove_os, restriction_categories):
             cal_nc.append(int(mdb.data.shape[0]))
     
     mtx = None
+    max_calib_samples = 1024 # wip, higher is better
     if len(cal_list)>0:
         # make sure that all blocks have same read size and same number of coils
         import scipy.stats
@@ -216,7 +240,6 @@ def get_cal_data(meas, cc_mode, remove_os, restriction_categories):
         mask = (cal_nx==mode_x) & (cal_nc==mode_c)
         cal_list = cal_list[mask]
         cal_isima = cal_isima[mask]
-        max_calib_samples = 1024
         # first pick image scans
         if cal_list.size<=max_calib_samples:
             # pick all
@@ -225,13 +248,20 @@ def get_cal_data(meas, cc_mode, remove_os, restriction_categories):
             # pick all image scans
             pick_mask = cal_isima.copy()
             missing_picks = max_calib_samples - pick_mask.sum()
-            if missing_picks>0:
-                # suplement with non-image scans
+            print('missing picks: ', missing_picks)
+            if missing_picks>max_calib_samples//4:
+                # supplement with non-image scans
                 tmp = np.full(pick_mask.size()-pick_mask.sum(), False)
                 tmp[:missing_picks] = True
                 np.random.shuffle(tmp)
                 pick_mask[~pick_mask] = tmp
-            
+            elif missing_picks<0:
+                # pick random subset of image scans
+                tmp = np.full(pick_mask.sum(), False)
+                tmp[:max_calib_samples] = True
+                np.random.shuffle(tmp)
+                pick_mask[pick_mask] = tmp
+
         cal_list = cal_list[pick_mask].tolist()
         if remove_os:
             cal_data = np.zeros((len(cal_list), mode_c, mode_x//2), dtype=np.complex64)
@@ -239,14 +269,13 @@ def get_cal_data(meas, cc_mode, remove_os, restriction_categories):
             cal_data = np.zeros((len(cal_list), mode_c, mode_x), dtype=np.complex64)
         for cnt, mdb_idx in enumerate(cal_list):
             data = meas['mdb'][mdb_idx].data
-            if cc_mode=='gcc' and meas['mdb'][mdb_idx].is_flag_set('REFLECT'):
+            if meas['mdb'][mdb_idx].is_flag_set('REFLECT'):
                 data = data[:,::-1]
             if remove_os:
                 data = np.fft.ifft(data)
                 nx = data.shape[-1]
                 data = np.delete(data, slice(nx//4, nx*3//4), -1)
                 data = np.fft.fft(data)
-                data = np.complex64(data)
             cal_data[cnt, :, :] = data
 
     return cal_data
@@ -256,8 +285,22 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
     
     twix = twixtools.read_twix(infile)
     restriction_categories = create_restriction_categories(cc_mode)
+
+    mtx = None
+    noise_mtx = None
+    noise_dmtx = None
+    if cc_mode or zfp:
+        # # calibrate noise decorrelation matrix for better compression
+        # noise = list()
+        # for mdb in twix[1]['mdb']:
+        #     if mdb.is_flag_set('NOISEADJSCAN'):
+        #         noise.append(mdb.data)
+        # if len(noise)>0:
+        #     noise_dmtx, noise_mtx = calculate_prewhitening(np.asarray(noise).swapaxes(0,1))
+        # del(noise)
+        pass
+
     if cc_mode:
-        mtx = None
         # calibrate coil compression based on last scan in list (image scan)
         # use the calibration coil weights for all data that fits
         cal_data = get_cal_data(twix[-1], cc_mode, remove_os, restriction_categories)
@@ -267,8 +310,6 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             ncc = 1 + np.argwhere(np.cumsum(s)/s.sum() > (1-cc_tol))[0,0]
         mtx = mtx[:,:ncc, :]
         print('coil compression from %d channels to %d virtual channels'%(mtx.shape[-1], ncc))
-    else:
-        mtx = None
     
     t_start = time.time()
     with h5py.File(outfile, "w") as f:
@@ -289,11 +330,10 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
         
         if mtx is not None:
             # save mtx for coil compression
-            if zfp:
-                f.attrs['mtx_shape'] = mtx.shape
-                f.create_dataset("mtx", data=pyzfp.compress(mtx.flatten().view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True))
-            else:
-                f.create_dataset("mtx", data=mtx, compression="gzip", compression_opts=9)
+            f.create_dataset("mtx", data=mtx, compression="gzip", compression_opts=9)
+        if noise_dmtx is not None:
+            f.create_dataset("noise_dmtx", data=noise_dmtx, compression="gzip", compression_opts=9)
+            f.create_dataset("noise_mtx", data=noise_mtx, compression="gzip", compression_opts=9)
 
         for meas_key, meas in enumerate(twix[1:]):
             grp = f.create_group("scan%d"%(meas_key))
@@ -301,10 +341,13 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
 
             # first gather some information about the measurement
             data_len = {'BYTEARRAY': 0, 'COMPLEXDATA': 0}
-            mdh_count = len(meas['mdb'])
-            for mdb in meas['mdb']:
+            for mdb_key, mdb in enumerate(meas['mdb']):
                 if mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'):
                     data_len['BYTEARRAY']+=1
+                if rm_fidnav and mdb.is_flag_set('noname60'):
+                    del(meas['mdb'][mdb_key])
+            
+            mdh_count = len(meas['mdb'])
             data_len['COMPLEXDATA'] = mdh_count - data_len['BYTEARRAY']
 
             grp.create_dataset('mdh_info', shape=[mdh_count], dtype=mdh_def.scan_hdr_type, compression="gzip", compression_opts=9)
@@ -329,10 +372,12 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                 grp.create_dataset('COMPLEXDATA', shape=[data_len['COMPLEXDATA']], dtype=dt, compression="gzip", compression_opts=9)
 
             data_count = {'BYTEARRAY': 0, 'COMPLEXDATA': 0}
+            scan_counter = 0
             for mdb_key, mdb in enumerate(meas['mdb']):
-                if rm_fidnav and mdb.is_flag_set('noname60'):
-                    # ignore fidnav scans
-                    continue
+                if not mdb.is_flag_set('SYNCDATA'):
+                    # update scan_counter (in case some blocks were deleted; no missing scan counters allowed)
+                    scan_counter += 1  # starts at 1
+                    mdb.mdh['ulScanCounter'] = scan_counter
 
                 grp['mdh_info'][mdb_key] = mdb.mdh
 
@@ -346,17 +391,16 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                         data, grp['rm_os_active'][cur_count], grp['cc_active'][cur_count] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=False)
                     else:
                         data, grp['rm_os_active'][cur_count], grp['cc_active'][cur_count] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx)
-
-                    data = data.flatten()
                     
+                    data = data.flatten()
                     if zfp:
+                        data = np.ascontiguousarray(data) # flatten not really necessary
                         data = pyzfp.compress(data.view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True)
                     
                     grp['COMPLEXDATA'][cur_count] = data
-                    
-                        # grp['COMPLEXDATA'][pos['COMPLEXDATA']:pos['COMPLEXDATA']+data.size] = data.flatten()
-                        # pos['COMPLEXDATA'] += data.size
+
                     if len(mdb.channel_hdr) > 0:
+                        mdb.channel_hdr[0]['ulScanCounter'] = scan_counter
                         grp['coil_info'][cur_count] = mdb.channel_hdr[0]
                         for coil_key, coil_item in enumerate(mdb.channel_hdr):
                             grp['coil_list'][cur_count, coil_key] = coil_item['ulChannelId']
@@ -371,7 +415,8 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
 def reconstruct_twix(infile, outfile=None):
     #wip: function takes no parameters, all necessary information needs to be included in hdf file
     def write_sync_bytes(f):
-        syncbytes = (512-(f.tell())%512)%512
+        syncbytes = (512-f.tell()%512)%512
+        # print('syncbytes', syncbytes)
         f.write(b'\x00' * syncbytes)
 
     if outfile is None:
@@ -380,7 +425,7 @@ def reconstruct_twix(infile, outfile=None):
     
     t_start = time.time()
 
-    with h5py.File(infile, "r") as f, open(outfile, 'xb') as fout:
+    with h5py.File(infile, "r") as f, open(outfile, 'wb') as fout:
         
         remove_os = f.attrs['remove_os']
         cc_mode = f.attrs['cc_mode']
@@ -395,9 +440,6 @@ def reconstruct_twix(infile, outfile=None):
         inv_mtx = None
         if cc_mode is not False and 'mtx' in f.keys():
             mtx = f['mtx'][()]
-            if zfp:
-                mtx_shape = f.attrs['mtx_shape']
-                mtx = pyzfp.decompress(mtx, [2*mtx_shape.prod()], np.dtype('float32'), tolerance=zfp_tol, precision=zfp_prec).view('complex64').reshape(mtx_shape)
 
             inv_mtx = np.zeros_like(mtx).swapaxes(1,-1)
             for x in range(mtx.shape[0]):
@@ -452,7 +494,8 @@ def reconstruct_twix(infile, outfile=None):
 
                     data = f[scan]['COMPLEXDATA'][cur_count]    
                     if zfp:
-                        data = pyzfp.decompress(data, [n_data_coils*2*n_data_sampl], np.dtype('float32'), tolerance=zfp_tol, precision=zfp_prec).view('complex64')
+                        data = pyzfp.decompress(data, [n_data_coils*2*n_data_sampl], np.dtype('float32'), tolerance=zfp_tol, precision=zfp_prec)
+                        data = np.ascontiguousarray(data).view('complex64')
                     data = data.reshape(n_data_coils, n_data_sampl)
                     
                     if cc_mode and cc_active[cur_count]:
@@ -475,9 +518,9 @@ def reconstruct_twix(infile, outfile=None):
 
             # update scan_len
             scan_len.append(fout.tell() - scan_pos[-1])
-            if mdh_def.is_flag_set(mdh, 'ACQEND'):
-                # scan_len fix for acqend
-                scan_len[-1] -= 192
+            # if mdh_def.is_flag_set(mdh, 'ACQEND'):
+            #     # scan_len fix for acqend
+            #     scan_len[-1] -= 192
 
             # add sync bytes between scans
             write_sync_bytes(fout)
@@ -489,6 +532,8 @@ def reconstruct_twix(infile, outfile=None):
         multi_header['hdr']['count_'] = n_scans
         # write scan_pos & scan_len for each scan
         for i, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
+            # print('scan', i, ' len_ old: ', multi_header['entry'][i]['len_'], ' new:', len_)
+            # print('scan', i, ' off_ old: ', multi_header['entry'][i]['off_'], ' new:', pos_)
             multi_header['entry'][i]['len_'] = len_
             multi_header['entry'][i]['off_'] = pos_
 
@@ -550,7 +595,7 @@ if __name__ == "__main__":
     if args.decompress:
         parser.add_argument('-i', '--infile', '--in', type=HDF5File('r'),
                             help='Input HDF5 file', required=True)
-        parser.add_argument('-o', '--outfile', '--out', type=TwixFile('w'),
+        parser.add_argument('-o', '--outfile', '--out', type=TwixFile('x'),
                             help='Output twix .dat file', required=False)
     else:
         parser.add_argument('-i', '--infile', '--in', type=TwixFile('r'),
@@ -560,51 +605,87 @@ if __name__ == "__main__":
         parser.add_argument("--remove_os", action="store_true")
         parser.add_argument("--remove_fidnav", action="store_true")
         
-        parser.add_argument('--cc_mode', choices=[False, 'scc', 'gcc'], default=False)
-
         group_cc = parser.add_mutually_exclusive_group()
-        group_cc.add_argument("-n", "--ncc", "-n_compressed_coils", type=int)
-        group_cc.add_argument("-t", "--cc_tol", default=0.05, type=float)
+        group_cc.add_argument("--scc", action="store_true")
+        group_cc.add_argument("--gcc", action="store_true")
+
+        group_ncc = parser.add_mutually_exclusive_group()
+        group_ncc.add_argument("-n", "--ncc", "-n_compressed_coils", type=int)
+        group_ncc.add_argument("-t", "--cc_tol", default=0.05, type=float)
 
         parser.add_argument("--zfp", action="store_true")
         group_zfp = parser.add_mutually_exclusive_group()
         group_zfp.add_argument("--zfp_tol", default=1e-7, type=float)
         group_zfp.add_argument("--zfp_prec", default=None, type=float)
 
-
         parser.add_argument("--testmode", action="store_true")
 
     args = parser.parse_args()
-    
-    if args.ncc is not None:
-        args.cc_tol = None
-
-    if args.zfp_prec is not None:
-        args.zfp_tol = None
 
     if args.decompress:
         reconstruct_twix(args.infile, args.outfile)
     else:
-        compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=args.cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)
+        if args.ncc is not None:
+            args.cc_tol = None
+
+        if args.zfp_prec is not None:
+            args.zfp_tol = None
+
+        cc_mode = False
+        if args.scc:
+            cc_mode = 'scc'
+        elif args.gcc:
+            cc_mode = 'gcc'
+    
+        compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)
         if args.testmode:
             with h5py.File(args.outfile, "r") as f:
                 print(f.keys())
                 print(f['scan0'].keys())
 
-            import tempfile
-            tmp_name = tempfile.mktemp(suffix='.dat')
-            reconstruct_twix(args.outfile, tmp_name)
+            # import re
+            # out_name = re.search('meas_MID(\d+)_FID(\d+)', args.infile)
+            
+            # if out_name is None:
+            #     import tempfile
+            #     out_name = tempfile.mktemp(suffix='.dat')
+            # else:
+            #     out_name = out_name.group()
+            out_name,_ = os.path.splitext(args.infile)
+            if args.remove_fidnav:
+                out_name += '_rmfidnav'
+            if args.remove_os:
+                out_name += '_rmOS'
+            if args.zfp:
+                if args.zfp_tol:
+                    out_name += '_zfptol' + str(args.zfp_tol)
+                else:
+                    out_name += '_zfpprec' + str(args.zfp_prec)
+            if args.scc:
+                if args.ncc:
+                    out_name += '_scc' + str(args.ncc)
+                else:
+                    out_name += '_scctol' + str(args.cc_tol)
+            elif args.gcc:
+                if args.ncc:
+                    out_name += '_gcc' + str(args.ncc)
+                else:
+                    out_name += '_gcctol' + str(args.cc_tol)
+            out_name += '.dat'
+            
+            
+            reconstruct_twix(args.outfile, out_name)
             inputsz = os.path.getsize(args.infile)
             comprsz = os.path.getsize(args.outfile)
-            reconsz = os.path.getsize(tmp_name)
+            reconsz = os.path.getsize(out_name)
             print('original size = ', inputsz, ' compressed size =', comprsz, ' comp. factor =', inputsz/comprsz, ' reconstructed size =', reconsz)
-            if md5(args.infile) == md5(tmp_name):
-                print('md5 hashes match, perfect reconstruction (lossless compression)')
-            # test read:
-            try:
-                twix = twixtools.read_twix(tmp_name)
-                print('\nreconstructed twix file successfully parsed')
-            except:
-                print('\nerror parsing reconstructed twix file')
-            # os.remove(tmp_name)
-            print('reconstructed .dat file:', tmp_name)
+            # if md5(args.infile) == md5(out_name):
+            #     print('md5 hashes match, perfect reconstruction (lossless compression)')
+            # # test read:
+            # try:
+            #     twix = twixtools.read_twix(out_name)
+            #     print('\nreconstructed twix file successfully parsed')
+            # except:
+            #     print('\nerror parsing reconstructed twix file')
+            # os.remove(out_name)
+            print('reconstructed .dat file:', out_name)

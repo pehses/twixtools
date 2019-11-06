@@ -185,6 +185,7 @@ def scc_calibrate_mtx(data):
     data = data.flatten().reshape((-1, nc))
     U, s, V = np.linalg.svd(data, full_matrices=False)
     V = np.conj(V)
+    np.save('scc_mtx.npy', s)
     return V[np.newaxis, :, :], s
 
 
@@ -193,12 +194,12 @@ def gcc_calibrate_mtx(data):
     data = np.moveaxis(data,1,-1)
     im = np.fft.ifft(data, axis=1)
     mtx = np.zeros((nx, nc, nc),dtype = 'complex64')
-    s = np.zeros(nc, dtype='float32')
+    s = np.zeros((nx, nc), dtype='float32')
     for x in range(nx):
-        U, s_, V = np.linalg.svd(im[:,x,:], full_matrices=False)
-        mtx[x,:,:] = np.conj(V)
-        s += s_
-    return mtx, s
+        U, s[x], V = np.linalg.svd(im[:,x,:], full_matrices=False)
+        mtx[x,:,:] = np.conj(V) 
+    np.save('gcc_mtx.npy', s)
+    return mtx, s.mean(axis=0)
 
 
 def calibrate_mtx(data, cc_mode):
@@ -223,7 +224,7 @@ def get_cal_data(meas, cc_mode, remove_os, restriction_categories):
             cal_nc.append(int(mdb.data.shape[0]))
     
     mtx = None
-    max_calib_samples = 1024 # wip, higher is better
+    max_calib_samples = 4096 # wip, higher is better
     if len(cal_list)>0:
         # make sure that all blocks have same read size and same number of coils
         import scipy.stats
@@ -518,9 +519,6 @@ def reconstruct_twix(infile, outfile=None):
 
             # update scan_len
             scan_len.append(fout.tell() - scan_pos[-1])
-            # if mdh_def.is_flag_set(mdh, 'ACQEND'):
-            #     # scan_len fix for acqend
-            #     scan_len[-1] -= 192
 
             # add sync bytes between scans
             write_sync_bytes(fout)

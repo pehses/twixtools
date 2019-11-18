@@ -47,83 +47,70 @@ class Mdb_base(object):
     dma_len = property(_get_dma_len)
 
     def is_flag_set(self, flag):
-        mask = self.mdh['aulEvalInfoMask']
-        bit = mdh_def.mask_id.index(flag)
-        if bit<32:
-            return bool(mask[0] & (1 << bit))
-        else:
-            return bool(mask[1] & (1 << bit-32))
+        return mdh_def.is_flag_set(self.mdh, flag)
 
     def get_flag(self, flag):
-        return self.is_flag_set(flag)
+        return mdh.get_flag(self.mdh, flag)
 
     def set_flag(self, flag, val):
-        if val:
-            self.add_flag(flag)
-        else:
-            self.remove_flag(flag)
+        mdh_def.set_flag(self.mdh, flag, val)
 
     def add_flag(self, flag):
-        bit = mdh_def.mask_id.index(flag)
-        if bit<32:
-            self.mdh['aulEvalInfoMask'][0] |= (1 << bit)
-        else:
-            self.mdh['aulEvalInfoMask'][1] |= (1 << bit-32)
+        mdh_def.add_flag(self.mdh, flag)
 
     def remove_flag(self, flag):
-        bit = mdh_def.mask_id.index(flag)
-        if bit<32:
-            self.mdh['aulEvalInfoMask'][0] &= ~(1 << bit)
-        else:
-            self.mdh['aulEvalInfoMask'][1] &= ~(1 << bit-32)
+        mdh_def.remove_flag(self.mdh, flag)
 
     def get_flags(self):
-        mask = unpack_bits(self.mdh['aulEvalInfoMask'])
-        return dict(zip(mdh_def.mask_id, mask))
+        return mdh_def.get_flags(self.mdh)
     
     def get_active_flags(self):
-        return [key for key,item in self.get_flags().items() if item] 
+        return mdh_def.get_active_flags(self.mdh)
 
     def set_flags(self, flags): 
-        if isinstance(flags, list):
-            for key in flags:
-                self.set_flag(key, True)
-        elif isinstance(flags, dict):
-            for key, item in flags:
-                self.set_flag(key, item)
-        else:
-            raise ValueError
+        mdh_def.set_flags(self.mdh, flags)
 
     def clear_all_flags(self):
-        self.mdh['aulEvalInfoMask'][0] = 0
-        self.mdh['aulEvalInfoMask'][1] = 0
+        mdh_def.clear_all_flags(self.mdh)
 
-    def get_myflags(self):
-        flags = self.get_flags()
-        # del flags[None]
+    def is_image_scan(self):
+        return mdh_def.is_image_scan(self.mdh)
 
-        # set flag for skope sync scans
-        flags['SKOPE_SYNCSCAN'] = flags['RETRO_DUMMYSCAN']
+    @property
+    def cLin(self):
+        return self.mdh['sLC']['ushLine']
+    
+    @property
+    def cAcq(self):
+        return self.mdh['sLC']['ushAcquisition']
 
-        # we add another flag for imascans (just to simplify stuff later on)
-        flags['IMASCAN'] = True
+    @property
+    def cSlc(self):
+        return self.mdh['sLC']['ushSlice']
 
-        if flags['ACQEND'] or flags['SYNCDATA']\
-                or flags['RTFEEDBACK'] or flags['HPFEEDBACK']\
-                or flags['PHASCOR'] or flags['NOISEADJSCAN']\
-                or flags['SKOPE_SYNCSCAN']:
-            flags['IMASCAN'] = False
+    @property
+    def cPar(self):
+        return self.mdh['sLC']['ushPartition']
 
-        # otherwise the PATREFSCAN might be overwritten
-        if flags['PHASESTABSCAN'] or flags['REFPHASESTABSCAN']:
-            flags['PATREFSCAN'] = False
-            flags['PATREFANDIMASCAN'] = False
-            flags['IMASCAN'] = False
+    @property
+    def cEco(self):
+        return self.mdh['sLC']['ushEcho']
 
-        if flags['PATREFSCAN'] and not flags['PATREFANDIMASCAN']:
-            flags['IMASCAN'] = False
+    @property
+    def cPhs(self):
+        return self.mdh['sLC']['ushPhase']
 
-        return flags
+    @property
+    def cRep(self):
+        return self.mdh['sLC']['ushRepetition']
+
+    @property
+    def cSet(self):
+        return self.mdh['sLC']['ushSet']
+
+    @property
+    def cSeg(self):
+        return self.mdh['sLC']['ushSeg']
 
     def update_CRC(self):
         if version_is_ve:

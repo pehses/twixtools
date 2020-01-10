@@ -24,9 +24,9 @@ Installation through python setup</span>.py install is currently not possible.
 
 The tool works under Python 3.7 with the following packages installed:
 
-* numpy $\geq$ 1.17.3
-* pyzfp $\geq$ 0.3.1
-* h5py $\geq$ 2.10.0
+* numpy &ge; 1.17.3
+* pyzfp &ge; 0.3.1
+* h5py &ge; 2.10.0
 
 The pyzfp and h5py libraries can be installed via pip:
 

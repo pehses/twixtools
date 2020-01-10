@@ -2,12 +2,12 @@
 
 ## Purpose
 
-twixzip is a Python based command line tool for MRI raw data compression. Following compression methods can be selected via the command line:
+twixzip is a Python based command line tool for Siemens MRI raw data compression. Following compression methods can be selected via the command line:
 
 * Oversampling removal
 * Lossy floating point compression using the zfp library
-* Single coil compression (scc)
-* Geometric coil compression (gcc)
+* Single coil compression (scc) based on svd
+* Geometric coil compression (gcc) based on svd
 * Optionally FID navigators can be removed
 
 Before applying the selected compression method(s), lossless compression (gzip) is applied to the header and meta data information which is then added to a hdf5 file. All additional meta information necessary for decompression (e.g. coil compression matrices) are also stored in the hdf5 file.
@@ -45,7 +45,7 @@ Input and output directories & filenames are required arguments that can be sele
     -i infile:  input file  
     -o outfile: output file
 
-In the compression mode the input file should be an MRI raw data file, in the decompression mode (`-d`) it should be the hdf5 file containing the compressed data. The output file is then an hdf5 file (comprssion mode) or an MRI raw data file (decompression mode).
+In the compression mode the input file should be an MRI raw data file, in the decompression mode (`-d`) it should be the hdf5 file containing the compressed data. The output file is then an hdf5 file (compression mode) or an MRI raw data file (decompression mode).
 
 Compression methods can be selected via:
 

@@ -54,5 +54,6 @@ Compression methods can be selected via:
     --gcc -n NCC:               geometric coil compression with NCC virtual coils
     --scc -n NCC:               single coil compression with NCC virtual coils
     --zfp --zfp_tol ZFP_TOL:    floating point compression with ZFP_TOL tolerance
+    --zfp --zfp_prec ZFP_PREC:  floating point compression with ZFP_PREC precision (not recommended)
 
 The optional argument `--testmode` can be used to automatically decompress the data after compression. The created decompressed MRI raw data filename contains the selected compression method.

@@ -21,11 +21,13 @@ def to_freqdomain(data, x_in_timedomain):
     else:
         return np.fft.ifft(data), False
 
+
 def to_timedomain(data, x_in_timedomain):
     if x_in_timedomain:
         return data, True
     else:
         return np.fft.fft(data), True
+
 
 def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None):
 
@@ -129,34 +131,16 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
     return np.complex64(data)
 
 
-def create_restriction_categories(cc_mode=False):
-    restriction_categories = {'NO_RESTRICTIONS': None}  # all data that does not fit into other categories
-    restriction_categories['BYTEARRAY'] = {'ACQEND', 'SYNCDATA'}
-    if cc_mode is not None and cc_mode is not False:
-        restriction_categories['NO_COILCOMP'] = set()
-        # restriction_categories['NO_COILCOMP'].add('RAWDATACORRECTION')
-        # if cc_mode == 'gcc': # only disable for gcc? (scc should in principle be able to handle noise data!?)
-        restriction_categories['NO_COILCOMP'].add('NOISEADJSCAN')
-        restriction_categories['NO_COILCOMP'].add('noname60') # our own fidnav scan
-    else:
-        restriction_categories['NO_COILCOMP'] = ''
-    print(restriction_categories)
-    return restriction_categories
-
-
-def get_restrictions(mdh_flags, restriction_categories):
+def get_restrictions(mdh_flags):
     flags = {key for key, item in mdh_flags.items() if item}
-    restrictions = 'NO_RESTRICTIONS'
-    if flags.intersection(restriction_categories['BYTEARRAY']):
-        restrictions = 'BYTEARRAY'
-    elif flags.intersection(restriction_categories['NO_COILCOMP']):
-        restrictions = 'NO_COILCOMP'
-    if restrictions=='BYTEARRAY':
-        data_category = 'BYTEARRAY'
-    else:
-        data_category = 'COMPLEXDATA'
 
-    return restrictions, data_category
+    restrictions = 'NO_RESTRICTIONS'
+    if flags.intersection({'ACQEND', 'SYNCDATA'}):
+        restrictions = 'BYTEARRAY'
+    elif flags.intersection({'NOISEADJSCAN', 'noname60'}):
+        restrictions = 'NO_COILCOMP'
+
+    return restrictions
 
 
 def calculate_prewhitening(noise, scale_factor=1.0):
@@ -213,10 +197,10 @@ def calibrate_mtx(data, cc_mode):
     return mtx, s
 
 
-def get_cal_data(meas, cc_mode, remove_os, restriction_categories):
+def get_cal_data(meas, cc_mode, remove_os):
     cal_list, cal_isima, cal_nx, cal_nc = list(), list(), list(), list()
     for mdb_key, mdb in enumerate(meas['mdb']):
-        restrictions, data_category =  get_restrictions(mdb.get_flags(), restriction_categories)
+        restrictions =  get_restrictions(mdb.get_flags())
         if restrictions=='NO_RESTRICTIONS': # and not mdb.is_flag_set('RAWDATACORRECTION'): # wip!?
             cal_list.append(int(mdb_key))
             cal_isima.append(mdh_def.is_image_scan(mdb.mdh))
@@ -285,8 +269,11 @@ def get_cal_data(meas, cc_mode, remove_os, restriction_categories):
 def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_tol=0.05, zfp=False, zfp_tol=1e-5, zfp_prec=None, rm_fidnav=False):
     
     twix = twixtools.read_twix(infile)
-    restriction_categories = create_restriction_categories(cc_mode)
 
+    lossless = 'gzip'
+    #lossless = 'lzf'
+    #lossless = None
+    
     mtx = None
     noise_mtx = None
     noise_dmtx = None
@@ -304,7 +291,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
     if cc_mode:
         # calibrate coil compression based on last scan in list (image scan)
         # use the calibration coil weights for all data that fits
-        cal_data = get_cal_data(twix[-1], cc_mode, remove_os, restriction_categories)
+        cal_data = get_cal_data(twix[-1], cc_mode, remove_os)
         mtx, s = calibrate_mtx(cal_data, cc_mode)
         del(cal_data)
         if ncc is None:
@@ -314,9 +301,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
     
     t_start = time.time()
     with h5py.File(outfile, "w") as f:
-        
         f.attrs["original_filename"] = os.path.basename(infile)
-        f.attrs['remove_os'] = remove_os
         f.attrs['cc_mode'] = cc_mode
         f.attrs['zfp'] = zfp
         if zfp_tol is None:
@@ -327,90 +312,87 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             f.attrs['zfp_prec'] = -1
         else:
             f.attrs['zfp_prec'] = zfp_prec
-        f.create_dataset("multi_header", data=np.frombuffer(twix[0].tobytes(), 'S1'), compression="gzip", compression_opts=9)
+        f.create_dataset("multi_header", data=np.frombuffer(twix[0].tobytes(), 'S1'), compression=lossless)
         
         if mtx is not None:
             # save mtx for coil compression
-            f.create_dataset("mtx", data=mtx, compression="gzip", compression_opts=9)
+            f.create_dataset("mtx", data=mtx, compression=lossless)
         if noise_dmtx is not None:
-            f.create_dataset("noise_dmtx", data=noise_dmtx, compression="gzip", compression_opts=9)
-            f.create_dataset("noise_mtx", data=noise_mtx, compression="gzip", compression_opts=9)
+            f.create_dataset("noise_dmtx", data=noise_dmtx, compression=lossless)
+            f.create_dataset("noise_mtx", data=noise_mtx, compression=lossless)
 
         for meas_key, meas in enumerate(twix[1:]):
             grp = f.create_group("scan%d"%(meas_key))
-            grp.create_dataset("hdr_str", data=meas['hdr_str'], compression="gzip", compression_opts=9)
+            grp.create_dataset("hdr_str", data=meas['hdr_str'], compression=lossless)
 
-            # first gather some information about the measurement
-            data_len = {'BYTEARRAY': 0, 'COMPLEXDATA': 0}
-            for mdb_key, mdb in enumerate(meas['mdb']):
-                if mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'):
-                    data_len['BYTEARRAY']+=1
-                if rm_fidnav and mdb.is_flag_set('noname60'):
-                    del(meas['mdb'][mdb_key])
-            
+            # remove fidnav scans if necessary
+            if rm_fidnav:
+                for mdb_key, mdb in enumerate(meas['mdb']):
+                    if mdb.is_flag_set('noname60'):
+                        del(meas['mdb'][mdb_key])
+
             mdh_count = len(meas['mdb'])
-            data_len['COMPLEXDATA'] = mdh_count - data_len['BYTEARRAY']
-
-            grp.create_dataset('mdh_info', shape=[mdh_count], dtype=mdh_def.scan_hdr_type, compression="gzip", compression_opts=9)
+            grp.create_dataset('mdh_info', shape=[mdh_count], dtype=mdh_def.scan_hdr_type, compression=lossless)
             # not all mdh's have coil_info's (namely ACQEND & SYNCDATA) but for simplicity allocate space anyway (only a few bytes overhead)
-            grp.create_dataset('coil_info', shape=[data_len['COMPLEXDATA']], dtype=mdh_def.channel_hdr_type, compression="gzip", compression_opts=9)
+            grp.create_dataset('coil_info', shape=[mdh_count], dtype=mdh_def.channel_hdr_type, compression=lossless)
             # similarly, just allocate the maximum number of possible coils (64 - in special cases 128 - increase further!?)
-            grp.create_dataset('coil_list', shape=[data_len['COMPLEXDATA'], 64], dtype=np.uint8, compression="gzip", compression_opts=9)
+            grp.create_dataset('coil_list', shape=[mdh_count, 64], dtype=np.uint8, compression=lossless)
             # create list to track for which mdbs os removal is active
-            grp.create_dataset('rm_os_active', data=np.zeros(data_len['COMPLEXDATA'], dtype=bool), compression="gzip", compression_opts=9)
+            grp.create_dataset('rm_os_active', data=np.zeros(mdh_count, dtype=bool), compression=lossless)
             # create list to track which mdbs have been coil compressed
-            grp.create_dataset('cc_active', data=np.zeros(data_len['COMPLEXDATA'], dtype=bool), compression="gzip", compression_opts=9)
+            grp.create_dataset('cc_active', data=np.zeros(mdh_count, dtype=bool), compression=lossless)
 
-            dt = h5py.vlen_dtype(np.dtype('S1'))
-            # dt = h5py.vlen_dtype(np.dtype('uint8'))
-            grp.create_dataset('BYTEARRAY', shape=[data_len['BYTEARRAY']], dtype=dt, compression="gzip", compression_opts=9)
-
+            dt = h5py.vlen_dtype(np.dtype('uint8'))
             if zfp:
-                dt = h5py.vlen_dtype(np.dtype('uint8'))
-                grp.create_dataset('COMPLEXDATA', shape=[data_len['COMPLEXDATA']], dtype=dt)
+                grp.create_dataset('DATA', shape=[mdh_count], dtype=dt)
             else:
-                dt = h5py.vlen_dtype(np.dtype('complex64'))
-                grp.create_dataset('COMPLEXDATA', shape=[data_len['COMPLEXDATA']], dtype=dt, compression="gzip", compression_opts=5)
-
-            data_count = {'BYTEARRAY': 0, 'COMPLEXDATA': 0}
-            scan_counter = 0
+                grp.create_dataset('DATA', shape=[mdh_count], dtype=dt, compression=lossless)
+            
+            syncscans = 0
             for mdb_key, mdb in enumerate(meas['mdb']):
-                if not mdb.is_flag_set('SYNCDATA'):
-                    # update scan_counter (in case some blocks were deleted; no missing scan counters allowed)
-                    scan_counter += 1  # starts at 1
-                    mdb.mdh['ulScanCounter'] = scan_counter
-
-                grp['mdh_info'][mdb_key] = mdb.mdh
-
-                if mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'): # is_bytearray
-                    grp['BYTEARRAY'][data_count['BYTEARRAY']] = mdb.data
-                    data_count['BYTEARRAY'] += 1
-                else:
-                    cur_count = data_count['COMPLEXDATA']
-                    restrictions, _ = get_restrictions(mdb.get_flags(), restriction_categories)
-                    if restrictions=='NO_COILCOMP':
-                        data, grp['rm_os_active'][cur_count], grp['cc_active'][cur_count] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=False)
+                is_syncscan = mdb.is_flag_set('SYNCDATA')
+                if rm_fidnav: # we have to update the scan counters
+                    if not is_syncscan:
+                        mdb.mdh['ulScanCounter'] = mdb_key + 1 - syncscans # scanCounter starts at 1
                     else:
-                        data, grp['rm_os_active'][cur_count], grp['cc_active'][cur_count] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx)
-                    
+                        syncscans += 1
+
+                # write mdh
+                grp['mdh_info'][mdb_key] = mdb.mdh
+                
+                if is_syncscan or mdb.is_flag_set('ACQEND'):
+                    data = np.ascontiguousarray(mdb.data).view('uint8')
+                else:
+                    restrictions = get_restrictions(mdb.get_flags())
+                    if restrictions == 'NO_COILCOMP':
+                        data, grp['rm_os_active'][mdb_key],_ = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=False)
+                    else:
+                        data, grp['rm_os_active'][mdb_key], grp['cc_active'][mdb_key] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx)
+
                     data = data.flatten()
                     if zfp:
-                        data = np.ascontiguousarray(data) # flatten not really necessary
                         data = pyzfp.compress(data.view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True)
-                    
-                    grp['COMPLEXDATA'][cur_count] = data
-
+                    else:
+                        data = data.view('uint8')
                     if len(mdb.channel_hdr) > 0:
-                        mdb.channel_hdr[0]['ulScanCounter'] = scan_counter
-                        grp['coil_info'][cur_count] = mdb.channel_hdr[0]
+                        mdb.channel_hdr[0]['ulScanCounter'] = mdb.mdh['ulScanCounter']
+                        grp['coil_info'][mdb_key] = mdb.channel_hdr[0]
                         for coil_key, coil_item in enumerate(mdb.channel_hdr):
-                            grp['coil_list'][cur_count, coil_key] = coil_item['ulChannelId']
+                            grp['coil_list'][mdb_key, coil_key] = coil_item['ulChannelId']
+
+                # write data
+                grp['DATA'][mdb_key] = data
+
+            
+            # from joblib import Parallel, delayed
+            # Parallel(n_jobs=2)(delayed(task)(mdb_key, mdb, is_byte, count, grp, remove_os, zfp, zfp_tol, zfp_prec, mtx) for mdb_key, (mdb, is_byte, count) in enumerate(zip(meas['mdb'], is_bytearray, data_counter)))
+            
+            
                     
-                    data_count['COMPLEXDATA'] += 1
 
     elapsed_time = (time.time() - t_start)
     print("compression finished in %d:%02d:%02d h"%(elapsed_time//3600, (elapsed_time%3600)//60, elapsed_time%60))
-    print("compression factor = %.2f"%(os.path.getsize(args.infile)/os.path.getsize(args.outfile)))
+    print("compression factor = %.2f"%(os.path.getsize(infile)/os.path.getsize(outfile)))
 
 
 def reconstruct_twix(infile, outfile=None):
@@ -428,7 +410,6 @@ def reconstruct_twix(infile, outfile=None):
 
     with h5py.File(infile, "r") as f, open(outfile, 'wb') as fout:
         
-        remove_os = f.attrs['remove_os']
         cc_mode = f.attrs['cc_mode']
         zfp = f.attrs['zfp']
         zfp_tol = f.attrs['zfp_tol']
@@ -446,8 +427,6 @@ def reconstruct_twix(infile, outfile=None):
             for x in range(mtx.shape[0]):
                 inv_mtx[x,:,:] = np.linalg.pinv(mtx[x,:,:])
             del(mtx)
-
-        restriction_categories = create_restriction_categories(cc_mode)
         
         # allocate space for multi-header
         fout.write(b'\x00' * 10240)
@@ -467,55 +446,51 @@ def reconstruct_twix(infile, outfile=None):
             # write header
             f[scan]['hdr_str'][()].tofile(fout)
 
-            data_count = {'BYTEARRAY': 0, 'COMPLEXDATA': 0}
                 
-            for raw_mdh in f[scan]['mdh_info']:
-                mdh = np.frombuffer(raw_mdh, mdh_def.scan_hdr_type)[0]
-                n_sampl = mdh['ushSamplesInScan']
-                n_coil = mdh['ushUsedChannels']
-                mdh_flags = mdh_def.get_flags(mdh)
-                is_bytearray = mdh_def.is_flag_set(mdh, 'ACQEND') or mdh_def.is_flag_set(mdh, 'SYNCDATA')
-                
+            for mdh_key, raw_mdh in enumerate(f[scan]['mdh_info']):
+
                 # write mdh
+                mdh = np.frombuffer(raw_mdh, mdh_def.scan_hdr_type)[0]
                 mdh.tofile(fout)
-                
+
                 # write data
+                is_bytearray = mdh_def.is_flag_set(mdh, 'ACQEND') or mdh_def.is_flag_set(mdh, 'SYNCDATA')
                 if is_bytearray:
-                    data = f[scan]['BYTEARRAY'][data_count['BYTEARRAY']]
+                    data = f[scan]['DATA'][mdh_key]
+                    # data = f[scan]['BYTEARRAY'][data_count['BYTEARRAY']]
                     data.tofile(fout)
-                    data_count['BYTEARRAY']+=1
                 else:
-                    cur_count = data_count['COMPLEXDATA']
+                    n_sampl = mdh['ushSamplesInScan']
+                    n_coil = mdh['ushUsedChannels']
                     n_data_sampl = n_sampl
-                    if rm_os_active[cur_count]:
+                    if rm_os_active[mdh_key]:
                         n_data_sampl //= 2
                     n_data_coils = n_coil
-                    if cc_mode and cc_active[cur_count]:
+                    if cc_mode and cc_active[mdh_key]:
                         n_data_coils = inv_mtx.shape[-1]
 
-                    data = f[scan]['COMPLEXDATA'][cur_count]    
+                    data = f[scan]['DATA'][mdh_key]
                     if zfp:
                         data = pyzfp.decompress(data, [n_data_coils*2*n_data_sampl], np.dtype('float32'), tolerance=zfp_tol, precision=zfp_prec)
-                        data = np.ascontiguousarray(data).view('complex64')
+                    
+                    data = np.ascontiguousarray(data).view('complex64')
                     data = data.reshape(n_data_coils, n_data_sampl)
                     
-                    if cc_mode and cc_active[cur_count]:
-                        data = expand_data(data, mdh, rm_os_active[cur_count], cc_mode=cc_mode, inv_mtx=inv_mtx)
+                    if cc_mode and cc_active[mdh_key]:
+                        data = expand_data(data, mdh, rm_os_active[mdh_key], cc_mode=cc_mode, inv_mtx=inv_mtx)
                     else:
-                        data = expand_data(data, mdh, rm_os_active[cur_count], cc_mode=False)
+                        data = expand_data(data, mdh, rm_os_active[mdh_key], cc_mode=False)
 
                     data = data.reshape((n_coil, -1))
 
-                    coil_hdr = np.frombuffer(f[scan]['coil_info'][cur_count], mdh_def.channel_hdr_type)[0].copy()
-                    coil_idx = f[scan]['coil_list'][cur_count]
+                    coil_hdr = np.frombuffer(f[scan]['coil_info'][mdh_key], mdh_def.channel_hdr_type)[0].copy()
+                    coil_idx = f[scan]['coil_list'][mdh_key]
                     for c in range(data.shape[0]):
                         #write channel header
                         coil_hdr['ulChannelId'] = coil_idx[c]
                         coil_hdr.tofile(fout)
                         # write data
                         data[c].tofile(fout)
-                    
-                    data_count['COMPLEXDATA'] += 1
 
             # update scan_len
             scan_len.append(fout.tell() - scan_pos[-1])
@@ -649,7 +624,7 @@ if __name__ == "__main__":
             #     out_name = tempfile.mktemp(suffix='.dat')
             # else:
             #     out_name = out_name.group()
-            out_name,_ = os.path.splitext(args.infile)
+            out_name = os.path.splitext(args.infile)[0]
             if args.remove_fidnav:
                 out_name += '_rmfidnav'
             if args.remove_os:
@@ -669,8 +644,11 @@ if __name__ == "__main__":
                     out_name += '_gcc' + str(args.ncc)
                 else:
                     out_name += '_gcctol' + str(args.cc_tol)
-            out_name += '.dat'
             
+            if out_name == os.path.splitext(args.infile)[0]:
+                out_name += '_new'
+            
+            out_name += '.dat'
             
             reconstruct_twix(args.outfile, out_name)
             inputsz = os.path.getsize(args.infile)

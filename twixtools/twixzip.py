@@ -370,7 +370,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                 grp.create_dataset('COMPLEXDATA', shape=[data_len['COMPLEXDATA']], dtype=dt)
             else:
                 dt = h5py.vlen_dtype(np.dtype('complex64'))
-                grp.create_dataset('COMPLEXDATA', shape=[data_len['COMPLEXDATA']], dtype=dt, compression="gzip", compression_opts=9)
+                grp.create_dataset('COMPLEXDATA', shape=[data_len['COMPLEXDATA']], dtype=dt, compression="gzip", compression_opts=5)
 
             data_count = {'BYTEARRAY': 0, 'COMPLEXDATA': 0}
             scan_counter = 0

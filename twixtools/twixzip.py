@@ -13,9 +13,6 @@ import twixtools
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
 
-import cProfile
-import pstats
-
 # helper functions:
 
 def to_freqdomain(data, x_in_timedomain):
@@ -615,6 +612,8 @@ if __name__ == "__main__":
             cc_mode = 'gcc'
     
         if args.profile:
+            import cProfile
+            import pstats
             cProfile.run('compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)','stats')
             p = pstats.Stats('stats')
             p.strip_dirs().sort_stats('cumulative').print_stats(15)    

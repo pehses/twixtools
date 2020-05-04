@@ -100,7 +100,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
                 break
             
 
-    # fid.close()
+    fid.close()
 
     return out
 

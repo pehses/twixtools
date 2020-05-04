@@ -13,6 +13,9 @@ import twixtools
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
 
+import cProfile
+import pstats
+
 # helper functions:
 
 def to_freqdomain(data, x_in_timedomain):
@@ -592,6 +595,7 @@ if __name__ == "__main__":
         group_zfp.add_argument("--zfp_prec", default=None, type=float)
 
         parser.add_argument("--testmode", action="store_true")
+        parser.add_argument("--profile", action="store_true")
 
     args = parser.parse_args()
 
@@ -610,7 +614,13 @@ if __name__ == "__main__":
         elif args.gcc:
             cc_mode = 'gcc'
     
-        compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)
+        if args.profile:
+            cProfile.run('compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)','stats')
+            p = pstats.Stats('stats')
+            p.strip_dirs().sort_stats('cumulative').print_stats(15)    
+        else:    
+            compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)
+        
         if args.testmode:
             with h5py.File(args.outfile, "r") as f:
                 print(f.keys())

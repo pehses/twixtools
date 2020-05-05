@@ -275,7 +275,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
     twix = twixtools.read_twix(infile)
 
     filters = tables.Filters(complevel=5, complib='zlib') # lossless compression settings
-
+    #filters = None
     
     mtx = None
     noise_mtx = None
@@ -383,7 +383,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                     data = data.flatten()
                     if zfp:
                         data = pyzfp.compress(data.view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True)
-                        data = np.frombuffer(data, dtype = 'uint8')
+                        data = np.frombuffer(data, dtype = 'uint64')
                     else:
                         data = data.view('uint8')
                     if len(mdb.channel_hdr) > 0:
@@ -484,6 +484,7 @@ def reconstruct_twix(infile, outfile=None):
 
                     data = getattr(f.root,scan).DATA[mdh_key]
                     if zfp:
+                        data = np.frombuffer(data, dtype = 'uint8')
                         data = memoryview(data)
                         data = pyzfp.decompress(data, [n_data_coils*2*n_data_sampl], np.dtype('float32'), tolerance=zfp_tol, precision=zfp_prec)
                     

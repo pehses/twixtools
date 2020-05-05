@@ -39,18 +39,22 @@ class ZFP_Test(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5, tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
             twixzip.compress_twix(infile=infile, outfile=out_h5.name, zfp=True, zfp_tol=zfp_tol)
             twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
-            sz_new = os.path.getsize(out_dat.name)
-        
-            all_close = True
-            for mdb_orig, mdb_new in zip(read_twix(infile)[-1]['mdb'], read_twix(out_dat.name)[-1]['mdb']):
-                if mdb_orig.is_flag_set('ACQEND') or mdb_orig.is_flag_set('SYNCDATA'):
-                    continue
-                if not np.allclose(mdb_orig.data, mdb_new.data, atol=zfp_tol):
-                    all_close = False
-                    break
 
-        self.assertEqual(sz_orig, sz_new, 'zfp: file size not equal to original')
-        self.assertTrue(all_close, 'zfp: not np.allclose()')
+            self.assertEqual(sz_orig, os.path.getsize(out_dat.name), 'zfp: file size not equal to original')
+
+            twix_orig = read_twix(infile)[-1]
+            twix_new = read_twix(out_dat.name)[-1]
+
+            self.assertTrue((np.all(twix_orig['hdr_str']==twix_new['hdr_str'])), 'zfp: headers do not match')
+
+            for mdb_orig, mdb_new in zip(twix_orig['mdb'], twix_new['mdb']):
+                if mdb_orig.is_flag_set('ACQEND'):
+                    continue
+                elif mdb_orig.is_flag_set('SYNCDATA'):
+                    continue
+
+                self.assertTrue(mdb_orig.mdh == mdb_new.mdh, 'zfp: mdhs do not match')
+                self.assertTrue(np.allclose(mdb_orig.data, mdb_new.data, atol=zfp_tol), 'zfp: mdb data not within zfp tolerance')
 
 
 class remove_os_Test(unittest.TestCase):
@@ -63,5 +67,5 @@ class remove_os_Test(unittest.TestCase):
             twixzip.compress_twix(infile=infile, outfile=out_h5.name, remove_os=True)
             twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
             sz_new = os.path.getsize(out_dat.name)
-        
+
         self.assertEqual(sz_orig, sz_new, 'remove_os: file size not equal to original')

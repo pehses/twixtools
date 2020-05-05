@@ -383,6 +383,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                     data = data.flatten()
                     if zfp:
                         data = pyzfp.compress(data.view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True)
+                        data = np.frombuffer(data, dtype = 'uint8')
                     else:
                         data = data.view('uint8')
                     if len(mdb.channel_hdr) > 0:
@@ -483,6 +484,7 @@ def reconstruct_twix(infile, outfile=None):
 
                     data = getattr(f.root,scan).DATA[mdh_key]
                     if zfp:
+                        data = memoryview(data)
                         data = pyzfp.decompress(data, [n_data_coils*2*n_data_sampl], np.dtype('float32'), tolerance=zfp_tol, precision=zfp_prec)
                     
                     data = np.ascontiguousarray(data).view('complex64')
@@ -610,7 +612,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.decompress:
-        reconstruct_twix(args.infile, args.outfile)
+        if args.profile:
+            cProfile.run('reconstruct_twix(args.infile, args.outfile)','stats_decompr')
+            p = pstats.Stats('stats_decompr')
+            p.strip_dirs().sort_stats('cumulative').print_stats(15)  
+        else:
+            reconstruct_twix(args.infile, args.outfile)
     else:
         if args.ncc is not None:
             args.cc_tol = None

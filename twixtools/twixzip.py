@@ -353,11 +353,11 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             # create list to track which mdbs have been coil compressed
             f.create_carray(grp,"cc_active", obj=np.zeros(mdh_count, dtype=bool), filters=filters)
 
-            dt = tables.UInt8Atom(shape=())
+            dt = tables.UInt64Atom(shape=())
             if zfp:
-                f.create_vlarray(grp,"DATA", atom=dt)
+                f.create_vlarray(grp,"DATA", atom=dt, expectedrows = mdh_count)
             else:
-                f.create_vlarray(grp,"DATA", atom=dt, filters=filters)
+                f.create_vlarray(grp,"DATA", atom=dt, filters=filters, expectedrows = mdh_count)
             
             syncscans = 0
             for mdb_key, mdb in enumerate(meas['mdb']):
@@ -372,7 +372,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                 grp.mdh_info[mdb_key*mdh_size:(mdb_key+1)*mdh_size] = np.frombuffer(mdb.mdh, dtype = 'uint8')
                 
                 if is_syncscan or mdb.is_flag_set('ACQEND'):
-                    data = np.ascontiguousarray(mdb.data).view('uint8')
+                    data = np.ascontiguousarray(mdb.data).view('uint64')
                 else:
                     restrictions = get_restrictions(mdb.get_flags())
                     if restrictions == 'NO_COILCOMP':
@@ -385,7 +385,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                         data = pyzfp.compress(data.view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True)
                         data = np.frombuffer(data, dtype = 'uint64')
                     else:
-                        data = data.view('uint8')
+                        data = data.view('uint64')
                     if len(mdb.channel_hdr) > 0:
                         mdb.channel_hdr[0]['ulScanCounter'] = mdb.mdh['ulScanCounter']
                         grp.coil_info[mdb_key*ch_hdr_size:(mdb_key+1)*ch_hdr_size] = np.frombuffer(mdb.channel_hdr[0], dtype = 'uint8')
@@ -470,7 +470,6 @@ def reconstruct_twix(infile, outfile=None):
                 is_bytearray = mdh_def.is_flag_set(mdh, 'ACQEND') or mdh_def.is_flag_set(mdh, 'SYNCDATA')
                 if is_bytearray:
                     data = getattr(f.root,scan).DATA[mdh_key]
-                    # data = f[scan]['BYTEARRAY'][data_count['BYTEARRAY']]
                     data.tofile(fout)
                 else:
                     n_sampl = mdh['ushSamplesInScan']

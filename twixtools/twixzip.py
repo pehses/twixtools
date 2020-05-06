@@ -3,10 +3,12 @@
 from __future__ import print_function   # for python 2.7 compatibility
 
 import os
+import sys
 import time
 import argparse
 import numpy as np
 import tables
+import bart
 
 import pyzfp
 
@@ -16,6 +18,36 @@ import twixtools.hdr_def as hdr_def
 
 import cProfile
 import pstats
+
+# class to hide BART prints
+class suppress_stdout_stderr(object):
+    '''
+    A context manager for doing a "deep suppression" of stdout and stderr in 
+    Python, i.e. will suppress all print, even if the print originates in a 
+    compiled C/Fortran sub-function.
+       This will not suppress raised exceptions, since exceptions are printed
+    to stderr just before a script exits, and after the context manager has
+    exited (at least, I think that is why it lets exceptions through).      
+
+    '''
+    def __init__(self):
+        # Open a pair of null files
+        self.null_fds =  [os.open(os.devnull,os.O_RDWR) for x in range(2)]
+        # Save the actual stdout (1) and stderr (2) file descriptors.
+        self.save_fds = [os.dup(1), os.dup(2)]
+
+    def __enter__(self):
+        # Assign the null pointers to stdout and stderr.
+        os.dup2(self.null_fds[0],1)
+        os.dup2(self.null_fds[1],2)
+
+    def __exit__(self, *_):
+        # Re-assign the real stdout/stderr back to (1) and (2)
+        os.dup2(self.save_fds[0],1)
+        os.dup2(self.save_fds[1],2)
+        # Close all file descriptors
+        for fd in self.null_fds + self.save_fds:
+            os.close(fd)
 
 # helper functions:
 
@@ -33,7 +65,7 @@ def to_timedomain(data, x_in_timedomain):
         return np.fft.fft(data), True
 
 
-def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None):
+def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
 
     if data.dtype == np.dtype("S1"):
         # nothing to do in case of bytearray
@@ -50,7 +82,7 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None):
         cc_active = True
 
     reflect_data = False
-    if rm_os_active or (cc_active and cc_mode=='gcc'):
+    if rm_os_active or (cc_active and (cc_mode=='gcc' or cc_mode=='gcc_bart')):
         reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
         if reflect_data:
             data = data[:,::-1]
@@ -61,19 +93,33 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None):
         data = np.delete(data, slice(nx//4, nx*3//4), -1)
 
     if cc_active:
-        nc, nx = data.shape
-        ncc = mtx.shape[1]
-        if cc_mode == 'scc':
-            data = mtx[0] @ data
-        elif cc_mode == 'gcc':
-            if nx!=mtx.shape[0]:
-                # nx mismatch; deactivate cc mode
-                cc_active = False
-            else:
-                data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
-                for x in range(nx):
-                    data[:ncc,x] = mtx[x] @ data[:,x]
-                data = data[:ncc,:]
+        if cc_mode=='scc' or cc_mode=='gcc':
+            nc, nx = data.shape
+            ncc = mtx.shape[1]
+            if cc_mode == 'scc':
+                data = mtx[0] @ data
+            elif cc_mode == 'gcc':
+                if nx!=mtx.shape[0]:
+                    # nx mismatch; deactivate cc mode
+                    cc_active = False
+                else:
+                    data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
+                    for x in range(nx):
+                        data[:ncc,x] = mtx[x] @ data[:,x]
+                    data = data[:ncc,:]
+        else:
+            with suppress_stdout_stderr():
+                # BART data format: [nx,ny,nz,nc]
+                data = np.expand_dims(np.expand_dims(np.swapaxes(data,0,1),1),1)
+                if cc_mode == 'scc_bart':
+                    data = bart.bart(1, 'ccapply -S -p '+str(ncc), data, mtx)
+                elif cc_mode == 'gcc_bart':
+                    if data.shape[0]!=mtx.shape[0]:
+                        # nx mismatch; deactivate cc mode
+                        cc_active = False
+                    else:
+                        data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx)
+                data = np.swapaxes(np.squeeze(data),0,1)
 
     data, x_in_timedomain = to_timedomain(data, x_in_timedomain)
     
@@ -95,13 +141,13 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
 
     x_in_timedomain = True
     reflect_data = False
-    if remove_os or cc_mode=='gcc':
+    if remove_os or cc_mode=='gcc' or cc_mode=='gcc_bart':
         # for performance reasons, x dim was stored in freq. domain
         reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
         if reflect_data:
             data = data[:,::-1]
     
-    if cc_mode:
+    if cc_mode=='scc' or cc_mode=='gcc':
         nc = inv_mtx.shape[1]
         ncc = inv_mtx.shape[-1]
         if cc_mode=='scc':
@@ -122,6 +168,17 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
                 data = np.pad(data, [(0, nc-ncc), (0, 0)])
                 for x in range(nx):
                     data[:,x] = inv_mtx[x,:,:] @ data[:ncc,x]
+    
+    if cc_mode=='scc_bart' or cc_mode=='gcc_bart':
+        with suppress_stdout_stderr():
+        # BART data format: [nx,ny,nz,nc]
+            data = np.expand_dims(np.expand_dims(np.swapaxes(data,0,1),1),1)
+            if cc_mode=='scc_bart':
+                data = bart.bart(1, 'ccapply -S -u', data, inv_mtx)
+            if cc_mode=='gcc_bart':
+                data = bart.bart(1, 'ccapply -G -u', data, inv_mtx) 
+            data = np.swapaxes(np.squeeze(data),0,1)
+      
 
     if remove_os:
         data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
@@ -200,8 +257,21 @@ def calibrate_mtx(data, cc_mode):
         raise ValueError
     return mtx, s
 
+def calibrate_mtx_bart(data, cc_mode):
+    # BART data format: [nx,ny,nz,nc]
+    data = np.expand_dims(np.moveaxis(data,-1,0),2) 
+    if cc_mode == 'scc_bart':
+        with suppress_stdout_stderr():
+            mtx = bart.bart(1,'cc -S -M', data)
+    elif cc_mode == 'gcc_bart':
+        with suppress_stdout_stderr():
+            mtx = bart.bart(1,'cc -G -M', data)
+    else:
+        print('unknown cc_mode "%s"'%(cc_mode))
+        raise ValueError
+    return mtx
 
-def get_cal_data(meas, cc_mode, remove_os):
+def get_cal_data(meas, remove_os):
     cal_list, cal_isima, cal_nx, cal_nc = list(), list(), list(), list()
     for mdb_key, mdb in enumerate(meas['mdb']):
         restrictions =  get_restrictions(mdb.get_flags())
@@ -211,7 +281,6 @@ def get_cal_data(meas, cc_mode, remove_os):
             cal_nx.append(int(mdb.data.shape[-1]))
             cal_nc.append(int(mdb.data.shape[0]))
     
-    mtx = None
     max_calib_samples = 4096 # wip, higher is better
     if len(cal_list)>0:
         # make sure that all blocks have same read size and same number of coils
@@ -294,21 +363,31 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
     if cc_mode:
         # calibrate coil compression based on last scan in list (image scan)
         # use the calibration coil weights for all data that fits
-        cal_data = get_cal_data(twix[-1], cc_mode, remove_os)
-        mtx, s = calibrate_mtx(cal_data, cc_mode)
-        del(cal_data)
-        if ncc is None:
-            ncc = 1 + np.argwhere(np.cumsum(s)/s.sum() > (1-cc_tol))[0,0]
-        mtx = mtx[:,:ncc, :]
-        print('coil compression from %d channels to %d virtual channels'%(mtx.shape[-1], ncc))
-    
+        cal_data = get_cal_data(twix[-1], remove_os)
+        if cc_mode=='scc' or cc_mode=='gcc':
+            mtx, s = calibrate_mtx(cal_data, cc_mode)
+            del(cal_data)
+            if ncc is None:
+                ncc = 1 + np.argwhere(np.cumsum(s)/s.sum() > (1-cc_tol))[0,0]
+            mtx = mtx[:,:ncc, :]
+            print('coil compression from %d channels to %d virtual channels'%(mtx.shape[-1], ncc))
+        else:
+            mtx = calibrate_mtx_bart(cal_data, cc_mode)
+            del(cal_data)
+            if ncc is None:
+                # set default
+                ncc = mtx.shape[-1]//2
+            print('coil compression from %d channels to %d virtual channels'%(mtx.shape[-1], ncc))
+
     t_start = time.time()
     with tables.open_file(outfile, mode="w") as f:
         
         
         f.root._v_attrs.original_filename = os.path.basename(infile)
         f.root._v_attrs.cc_mode = cc_mode
+        f.root._v_attrs.ncc = ncc
         f.root._v_attrs.zfp = zfp
+
         if zfp_tol is None:
             f.root._v_attrs.zfp_tol = -1
         else:
@@ -378,8 +457,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                     if restrictions == 'NO_COILCOMP':
                         data, grp.rm_os_active[mdb_key],_ = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=False)
                     else:
-                        data, grp.rm_os_active[mdb_key], grp.cc_active[mdb_key] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx)
-
+                        data, grp.rm_os_active[mdb_key], grp.cc_active[mdb_key] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx, ncc=ncc)
                     data = data.flatten()
                     if zfp:
                         data = pyzfp.compress(data.view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True)
@@ -435,10 +513,13 @@ def reconstruct_twix(infile, outfile=None):
         inv_mtx = None
         if cc_mode is not False and hasattr(f.root,'mtx'):
             mtx = f.root.mtx[()]
-
-            inv_mtx = np.zeros_like(mtx).swapaxes(1,-1)
-            for x in range(mtx.shape[0]):
-                inv_mtx[x,:,:] = np.linalg.pinv(mtx[x,:,:])
+            if cc_mode=='scc' or cc_mode=='gcc':
+                inv_mtx = np.zeros_like(mtx).swapaxes(1,-1)
+                for x in range(mtx.shape[0]):
+                    inv_mtx[x,:,:] = np.linalg.pinv(mtx[x,:,:])
+            else:
+                # do not invert BART mtx
+                inv_mtx = mtx.copy()
             del(mtx)
         
         # allocate space for multi-header
@@ -480,6 +561,8 @@ def reconstruct_twix(infile, outfile=None):
                     n_data_coils = n_coil
                     if cc_mode and cc_active[mdh_key]:
                         n_data_coils = inv_mtx.shape[-1]
+                        if cc_mode == 'scc_bart' or cc_mode == 'gcc_bart':
+                            n_data_coils = f.root._v_attrs.ncc
 
                     data = getattr(f.root,scan).DATA[mdh_key]
                     if zfp:
@@ -489,11 +572,11 @@ def reconstruct_twix(infile, outfile=None):
                     
                     data = np.ascontiguousarray(data).view('complex64')
                     data = data.reshape(n_data_coils, n_data_sampl)
-                    
                     if cc_mode and cc_active[mdh_key]:
                         data = expand_data(data, mdh, rm_os_active[mdh_key], cc_mode=cc_mode, inv_mtx=inv_mtx)
                     else:
                         data = expand_data(data, mdh, rm_os_active[mdh_key], cc_mode=False)
+                        
 
                     data = data.reshape((n_coil, -1))
                     
@@ -596,6 +679,8 @@ if __name__ == "__main__":
         group_cc = parser.add_mutually_exclusive_group()
         group_cc.add_argument("--scc", action="store_true")
         group_cc.add_argument("--gcc", action="store_true")
+        group_cc.add_argument("--scc_bart", action="store_true")
+        group_cc.add_argument("--gcc_bart", action="store_true")
 
         group_ncc = parser.add_mutually_exclusive_group()
         group_ncc.add_argument("-n", "--ncc", "-n_compressed_coils", type=int)
@@ -630,6 +715,10 @@ if __name__ == "__main__":
             cc_mode = 'scc'
         elif args.gcc:
             cc_mode = 'gcc'
+        elif args.scc_bart:
+            cc_mode = 'scc_bart'
+        elif args.gcc_bart:
+            cc_mode = 'gcc_bart'
     
         if args.profile:
             cProfile.run('compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)','stats_compr')
@@ -674,6 +763,13 @@ if __name__ == "__main__":
                     out_name += '_gcc' + str(args.ncc)
                 else:
                     out_name += '_gcctol' + str(args.cc_tol)
+            elif args.scc_bart:
+                if args.ncc:
+                    out_name += '_scc_bart' + str(args.ncc)
+            elif args.gcc_bart:
+                if args.ncc:
+                    out_name += '_gcc_bart' + str(args.ncc)
+
             
             if out_name == os.path.splitext(args.infile)[0]:
                 out_name += '_new'

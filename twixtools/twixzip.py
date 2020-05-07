@@ -230,7 +230,7 @@ def scc_calibrate_mtx(data):
     data = data.flatten().reshape((-1, nc))
     U, s, V = np.linalg.svd(data, full_matrices=False)
     V = np.conj(V)
-    np.save('scc_mtx.npy', s)
+    # np.save('scc_mtx.npy', s)
     return V[np.newaxis, :, :], s
 
 
@@ -243,7 +243,7 @@ def gcc_calibrate_mtx(data):
     for x in range(nx):
         U, s[x], V = np.linalg.svd(im[:,x,:], full_matrices=False)
         mtx[x,:,:] = np.conj(V) 
-    np.save('gcc_mtx.npy', s)
+    # np.save('gcc_mtx.npy', s)
     return mtx, s.mean(axis=0)
 
 
@@ -422,9 +422,9 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             mdh_size = mdh_def.scan_hdr_type.itemsize            
             ch_hdr_size = mdh_def.channel_hdr_type.itemsize
             
-            f.create_carray(grp,"mdh_info", shape=[mdh_count*mdh_size], atom=tables.UInt8Atom(), filters=filters)
+            f.create_carray(grp,"mdh_info", shape=[mdh_count,mdh_size], atom=tables.UInt8Atom(), filters=filters)
             # not all mdh's have coil_info's (namely ACQEND & SYNCDATA) but for simplicity allocate space anyway (only a few bytes overhead)
-            f.create_carray(grp,"coil_info", shape=[mdh_count*ch_hdr_size], atom=tables.UInt8Atom(), filters=filters)
+            f.create_carray(grp,"coil_info", shape=[mdh_count,ch_hdr_size], atom=tables.UInt8Atom(), filters=filters)
             # similarly, just allocate the maximum number of possible coils (64 - in special cases 128 - increase further!?)
             f.create_carray(grp,"coil_list", shape=[mdh_count, 64], atom=tables.UInt8Atom(), filters=filters)
             # create list to track for which mdbs os removal is active
@@ -448,7 +448,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                         syncscans += 1
 
                 # write mdh
-                grp.mdh_info[mdb_key*mdh_size:(mdb_key+1)*mdh_size] = np.frombuffer(mdb.mdh, dtype = 'uint8')
+                grp.mdh_info[mdb_key,:] = np.frombuffer(mdb.mdh, dtype = 'uint8')
                 
                 if is_syncscan or mdb.is_flag_set('ACQEND'):
                     data = np.ascontiguousarray(mdb.data).view('uint64')
@@ -466,7 +466,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                         data = data.view('uint64')
                     if len(mdb.channel_hdr) > 0:
                         mdb.channel_hdr[0]['ulScanCounter'] = mdb.mdh['ulScanCounter']
-                        grp.coil_info[mdb_key*ch_hdr_size:(mdb_key+1)*ch_hdr_size] = np.frombuffer(mdb.channel_hdr[0], dtype = 'uint8')
+                        grp.coil_info[mdb_key,:] = np.frombuffer(mdb.channel_hdr[0], dtype = 'uint8')
                         for coil_key, coil_item in enumerate(mdb.channel_hdr):
                             grp.coil_list[mdb_key, coil_key] = coil_item['ulChannelId']
 
@@ -529,6 +529,7 @@ def reconstruct_twix(infile, outfile=None):
         scan_len = list()
         
         scanlist = f.root._v_attrs.scanlist
+
         for key, scan in enumerate(scanlist):
             # keep track of byte pos
             scan_pos.append(fout.tell())
@@ -539,8 +540,8 @@ def reconstruct_twix(infile, outfile=None):
 
             # write header
             getattr(f.root,scan).hdr_str[()].tofile(fout)
-                
-            mdh_info = np.frombuffer(getattr(f.root,scan).mdh_info[()],dtype=mdh_def.scan_hdr_type)
+
+            mdh_info = np.frombuffer(getattr(f.root,scan).mdh_info[()], mdh_def.scan_hdr_type)
             for mdh_key, raw_mdh in enumerate(mdh_info):
 
                 # write mdh
@@ -579,9 +580,7 @@ def reconstruct_twix(infile, outfile=None):
                         
 
                     data = data.reshape((n_coil, -1))
-                    
-                    coil_info = np.frombuffer(getattr(f.root,scan).coil_info[()],dtype=mdh_def.channel_hdr_type)
-                    coil_hdr = np.frombuffer(coil_info[mdh_key], mdh_def.channel_hdr_type)[0].copy()
+                    coil_hdr = np.frombuffer(getattr(f.root,scan).coil_info[mdh_key,:], mdh_def.channel_hdr_type)[0].copy()
                     coil_idx = getattr(f.root,scan).coil_list[mdh_key]
                     for c in range(data.shape[0]):
                         #write channel header

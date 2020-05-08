@@ -8,16 +8,13 @@ import time
 import argparse
 import numpy as np
 import tables
-import bart
-
-import pyzfp
-
 import twixtools
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
+import pyzfp
+import bart
 
-import cProfile
-import pstats
+# helper functions:
 
 # class to hide BART prints
 class suppress_stdout_stderr(object):
@@ -49,7 +46,6 @@ class suppress_stdout_stderr(object):
         for fd in self.null_fds + self.save_fds:
             os.close(fd)
 
-# helper functions:
 
 def to_freqdomain(data, x_in_timedomain):
     if not x_in_timedomain:
@@ -94,7 +90,7 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
 
     if cc_active:
         if cc_mode=='scc' or cc_mode=='gcc':
-            nc, nx = data.shape
+            _, nx = data.shape
             ncc = mtx.shape[1]
             if cc_mode == 'scc':
                 data = mtx[0] @ data
@@ -159,26 +155,20 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
                 print('data shape: ', data.shape)
                 print('inv_mtx shape: ', inv_mtx.shape)
         else: # 'gcc'
-            if nx!=inv_mtx.shape[0]:
-                # nx mismatch; deactivate cc mode
-                cc_active = False
-            else:
-                data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
-                # pad missing channels in data with zeros
-                data = np.pad(data, [(0, nc-ncc), (0, 0)])
-                for x in range(nx):
-                    data[:,x] = inv_mtx[x,:,:] @ data[:ncc,x]
-    
-    if cc_mode=='scc_bart' or cc_mode=='gcc_bart':
+            data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
+            # pad missing channels in data with zeros
+            data = np.pad(data, [(0, nc-ncc), (0, 0)])
+            for x in range(nx):
+                data[:,x] = inv_mtx[x,:,:] @ data[:ncc,x]
+    elif cc_mode=='scc_bart' or cc_mode=='gcc_bart':
         with suppress_stdout_stderr():
-        # BART data format: [nx,ny,nz,nc]
+            # BART data format: [nx,ny,nz,nc]
             data = np.expand_dims(np.expand_dims(np.swapaxes(data,0,1),1),1)
             if cc_mode=='scc_bart':
                 data = bart.bart(1, 'ccapply -S -u', data, inv_mtx)
-            if cc_mode=='gcc_bart':
+            else: # 'gcc_bart'
                 data = bart.bart(1, 'ccapply -G -u', data, inv_mtx) 
             data = np.swapaxes(np.squeeze(data),0,1)
-      
 
     if remove_os:
         data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
@@ -225,25 +215,23 @@ def calculate_prewhitening(noise, scale_factor=1.0):
 
 
 def scc_calibrate_mtx(data):
-    [ny, nc, nx] = np.shape(data)
+    nc = data.shape[1]
     data = np.moveaxis(data,1,-1)
     data = data.flatten().reshape((-1, nc))
-    U, s, V = np.linalg.svd(data, full_matrices=False)
+    _, s, V = np.linalg.svd(data, full_matrices=False)
     V = np.conj(V)
-    # np.save('scc_mtx.npy', s)
     return V[np.newaxis, :, :], s
 
 
 def gcc_calibrate_mtx(data):
-    [ny, nc, nx] = np.shape(data)
+    nc, nx = data.shape[1:]
     data = np.moveaxis(data,1,-1)
     im = np.fft.ifft(data, axis=1)
     mtx = np.zeros((nx, nc, nc),dtype = 'complex64')
     s = np.zeros((nx, nc), dtype='float32')
     for x in range(nx):
-        U, s[x], V = np.linalg.svd(im[:,x,:], full_matrices=False)
-        mtx[x,:,:] = np.conj(V) 
-    # np.save('gcc_mtx.npy', s)
+        _, s[x], V = np.linalg.svd(im[:,x,:], full_matrices=False)
+        mtx[x,:,:] = np.conj(V)
     return mtx, s.mean(axis=0)
 
 
@@ -257,19 +245,21 @@ def calibrate_mtx(data, cc_mode):
         raise ValueError
     return mtx, s
 
+
 def calibrate_mtx_bart(data, cc_mode):
     # BART data format: [nx,ny,nz,nc]
     data = np.expand_dims(np.moveaxis(data,-1,0),2) 
     if cc_mode == 'scc_bart':
         with suppress_stdout_stderr():
-            mtx = bart.bart(1,'cc -S -M', data)
+            mtx = bart.bart(1, 'cc -S -M', data)
     elif cc_mode == 'gcc_bart':
         with suppress_stdout_stderr():
-            mtx = bart.bart(1,'cc -G -M', data)
+            mtx = bart.bart(1, 'cc -G -M', data)
     else:
         print('unknown cc_mode "%s"'%(cc_mode))
         raise ValueError
     return mtx
+
 
 def get_cal_data(meas, remove_os):
     cal_list, cal_isima, cal_nx, cal_nc = list(), list(), list(), list()
@@ -341,7 +331,8 @@ def get_cal_data(meas, remove_os):
 
 def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_tol=0.05, zfp=False, zfp_tol=1e-5, zfp_prec=None, rm_fidnav=False):
     
-    twix = twixtools.read_twix(infile)
+    with suppress_stdout_stderr():
+        twix = twixtools.read_twix(infile)
 
     filters = tables.Filters(complevel=5, complib='zlib') # lossless compression settings
     #filters = None
@@ -381,8 +372,6 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
 
     t_start = time.time()
     with tables.open_file(outfile, mode="w") as f:
-        
-        
         f.root._v_attrs.original_filename = os.path.basename(infile)
         f.root._v_attrs.cc_mode = cc_mode
         f.root._v_attrs.ncc = ncc
@@ -475,11 +464,8 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
         
         f.root._v_attrs.scanlist = scanlist    
             
-            # from joblib import Parallel, delayed
-            # Parallel(n_jobs=2)(delayed(task)(mdb_key, mdb, is_byte, count, grp, remove_os, zfp, zfp_tol, zfp_prec, mtx) for mdb_key, (mdb, is_byte, count) in enumerate(zip(meas['mdb'], is_bytearray, data_counter)))
-            
-            
-                    
+        # from joblib import Parallel, delayed
+        # Parallel(n_jobs=2)(delayed(task)(mdb_key, mdb, is_byte, count, grp, remove_os, zfp, zfp_tol, zfp_prec, mtx) for mdb_key, (mdb, is_byte, count) in enumerate(zip(meas['mdb'], is_bytearray, data_counter)))
 
     elapsed_time = (time.time() - t_start)
     print("compression finished in %d:%02d:%02d h"%(elapsed_time//3600, (elapsed_time%3600)//60, elapsed_time%60))
@@ -530,7 +516,7 @@ def reconstruct_twix(infile, outfile=None):
         
         scanlist = f.root._v_attrs.scanlist
 
-        for key, scan in enumerate(scanlist):
+        for scan in scanlist:
             # keep track of byte pos
             scan_pos.append(fout.tell())
 
@@ -617,7 +603,7 @@ def reconstruct_twix(infile, outfile=None):
 
 class TwixFile(argparse.FileType):
     def __call__(self, string):
-        base, ext = os.path.splitext(string)
+        _, ext = os.path.splitext(string)
 
         if ext == '':
             string = string + '.dat'  # .dat is default file extension
@@ -633,7 +619,7 @@ class TwixFile(argparse.FileType):
 
 class HDF5File(argparse.FileType):
     def __call__(self, string):
-        base, ext = os.path.splitext(string)
+        _, ext = os.path.splitext(string)
 
         if ext == '':
             string = string + '.h5'  # .dat is default file extension
@@ -645,14 +631,6 @@ class HDF5File(argparse.FileType):
         returnFile.close()
         returnFile = os.path.abspath(returnFile.name)
         return returnFile
-
-def md5(fname):
-    import hashlib
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
 
 
 if __name__ == "__main__":
@@ -697,6 +675,8 @@ if __name__ == "__main__":
 
     if args.decompress:
         if args.profile:
+            import cProfile
+            import pstats
             cProfile.run('reconstruct_twix(args.infile, args.outfile)','stats_decompr')
             p = pstats.Stats('stats_decompr')
             p.strip_dirs().sort_stats('cumulative').print_stats(15)  
@@ -720,6 +700,8 @@ if __name__ == "__main__":
             cc_mode = 'gcc_bart'
     
         if args.profile:
+            import cProfile
+            import pstats
             cProfile.run('compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)','stats_compr')
             p = pstats.Stats('stats_compr')
             p.strip_dirs().sort_stats('cumulative').print_stats(15)    
@@ -784,13 +766,4 @@ if __name__ == "__main__":
             comprsz = os.path.getsize(args.outfile)
             reconsz = os.path.getsize(out_name)
             print('original size = ', inputsz, ' compressed size =', comprsz, ' comp. factor =', inputsz/comprsz, ' reconstructed size =', reconsz)
-            # if md5(args.infile) == md5(out_name):
-            #     print('md5 hashes match, perfect reconstruction (lossless compression)')
-            # # test read:
-            # try:
-            #     twix = twixtools.read_twix(out_name)
-            #     print('\nreconstructed twix file successfully parsed')
-            # except:
-            #     print('\nerror parsing reconstructed twix file')
-            # os.remove(out_name)
             print('reconstructed .dat file:', out_name)

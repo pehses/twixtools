@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from twixtools import twixzip, read_twix
 from twixtools.mdh_def import is_flag_set
-
+from twixtools.twixzip import suppress_stdout_stderr
 
 def md5(fname):
     import hashlib
@@ -41,9 +41,10 @@ class ZFP_Test(unittest.TestCase):
             twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
 
             self.assertEqual(sz_orig, os.path.getsize(out_dat.name), 'zfp: file size not equal to original')
-
-            twix_orig = read_twix(infile)[-1]
-            twix_new = read_twix(out_dat.name)[-1]
+            
+            with suppress_stdout_stderr():
+                twix_orig = read_twix(infile)[-1]
+                twix_new = read_twix(out_dat.name)[-1]
 
             self.assertTrue((np.all(twix_orig['hdr_str']==twix_new['hdr_str'])), 'zfp: headers do not match')
 

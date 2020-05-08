@@ -338,12 +338,12 @@ def get_cal_data(meas, remove_os):
 
     return cal_data
 
+
 datinfo = [('mdh_info', mdh_def.scan_header),
            ('coil_info', mdh_def.channel_header),
            ('coil_list', 'uint8', 64), # just allocate the maximum number of possible coils (64 - in special cases 128 - increase further!?)
            ('rm_os_active', 'bool'),
-           ('cc_active', 'bool'),
-           ('dummy', 'uint8', 6)]  # fill up to next full 8 bytes for uint64 storage
+           ('cc_active', 'bool')]
 
 datinfo_type = np.dtype(datinfo)
 
@@ -430,7 +430,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             mdh_count = len(meas['mdb'])
             
             # create info array with mdh, coil & compression information
-            f.create_carray(grp, "info", shape=[mdh_count, datinfo_type.itemsize//8], atom=tables.UInt64Atom(), filters=filters)
+            f.create_carray(grp, "info", shape=[mdh_count, datinfo_type.itemsize], atom=tables.UInt8Atom(), filters=filters)
 
             dt = tables.UInt64Atom(shape=())
             if zfp:
@@ -457,7 +457,6 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                     restrictions = get_restrictions(mdb.get_flags())
                     if restrictions == 'NO_COILCOMP':
                         data, info['rm_os_active'],_ = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=False)
-                        
                     else:
                         data, info['rm_os_active'], info['cc_active'] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx, ncc=ncc)
                     data = data.flatten()
@@ -474,8 +473,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
 
                 # write data
                 grp.DATA.append(data)
-                # grp.info[mdb_key] = np.frombuffer(info, dtype='uint8')
-                grp.info[mdb_key] = np.frombuffer(info, dtype='uint64')
+                grp.info[mdb_key] = np.frombuffer(info, dtype='uint8')
         
         f.root._v_attrs.scanlist = scanlist    
             

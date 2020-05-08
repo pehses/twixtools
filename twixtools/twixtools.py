@@ -172,7 +172,7 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             else:
                 # start from scratch
                 multi_header = np.zeros(1, dtype=MultiRaidFileHeader)[0]
-                for k in range(n_scans):
+                for _ in range(n_scans):
                     multi_header['entry']['patName_'] = b'x'*45
                     multi_header['entry']['protName_'] = b'noname'
 

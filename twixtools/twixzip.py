@@ -13,6 +13,16 @@ import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
 import pyzfp
 import bart
+import cProfile
+import pstats
+
+# profiler workaround:
+# make sure that @profile does not result in error when line_profiler is not in use
+try:
+    profile
+except NameError:
+    profile = lambda x: x
+
 
 # helper functions:
 
@@ -328,7 +338,17 @@ def get_cal_data(meas, remove_os):
 
     return cal_data
 
+datinfo = [('mdh_info', mdh_def.scan_header),
+           ('coil_info', mdh_def.channel_header),
+           ('coil_list', 'uint8', 64), # just allocate the maximum number of possible coils (64 - in special cases 128 - increase further!?)
+           ('rm_os_active', 'bool'),
+           ('cc_active', 'bool'),
+           ('dummy', 'uint8', 6)]  # fill up to next full 8 bytes for uint64 storage
 
+datinfo_type = np.dtype(datinfo)
+
+
+@profile
 def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_tol=0.05, zfp=False, zfp_tol=1e-5, zfp_prec=None, rm_fidnav=False):
     
     with suppress_stdout_stderr():
@@ -408,18 +428,9 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                         del(meas['mdb'][mdb_key])
 
             mdh_count = len(meas['mdb'])
-            mdh_size = mdh_def.scan_hdr_type.itemsize            
-            ch_hdr_size = mdh_def.channel_hdr_type.itemsize
             
-            f.create_carray(grp,"mdh_info", shape=[mdh_count,mdh_size], atom=tables.UInt8Atom(), filters=filters)
-            # not all mdh's have coil_info's (namely ACQEND & SYNCDATA) but for simplicity allocate space anyway (only a few bytes overhead)
-            f.create_carray(grp,"coil_info", shape=[mdh_count,ch_hdr_size], atom=tables.UInt8Atom(), filters=filters)
-            # similarly, just allocate the maximum number of possible coils (64 - in special cases 128 - increase further!?)
-            f.create_carray(grp,"coil_list", shape=[mdh_count, 64], atom=tables.UInt8Atom(), filters=filters)
-            # create list to track for which mdbs os removal is active
-            f.create_carray(grp,"rm_os_active", obj=np.zeros(mdh_count, dtype=bool), filters=filters)
-            # create list to track which mdbs have been coil compressed
-            f.create_carray(grp,"cc_active", obj=np.zeros(mdh_count, dtype=bool), filters=filters)
+            # create info array with mdh, coil & compression information
+            f.create_carray(grp, "info", shape=[mdh_count, datinfo_type.itemsize//8], atom=tables.UInt64Atom(), filters=filters)
 
             dt = tables.UInt64Atom(shape=())
             if zfp:
@@ -429,6 +440,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             
             syncscans = 0
             for mdb_key, mdb in enumerate(meas['mdb']):
+                info = np.zeros(1, dtype=datinfo_type)[0]
                 is_syncscan = mdb.is_flag_set('SYNCDATA')
                 if rm_fidnav: # we have to update the scan counters
                     if not is_syncscan:
@@ -436,17 +448,18 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                     else:
                         syncscans += 1
 
-                # write mdh
-                grp.mdh_info[mdb_key,:] = np.frombuffer(mdb.mdh, dtype = 'uint8')
-                
+                # store mdh
+                info['mdh_info'] = mdb.mdh
+
                 if is_syncscan or mdb.is_flag_set('ACQEND'):
                     data = np.ascontiguousarray(mdb.data).view('uint64')
                 else:
                     restrictions = get_restrictions(mdb.get_flags())
                     if restrictions == 'NO_COILCOMP':
-                        data, grp.rm_os_active[mdb_key],_ = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=False)
+                        data, info['rm_os_active'],_ = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=False)
+                        
                     else:
-                        data, grp.rm_os_active[mdb_key], grp.cc_active[mdb_key] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx, ncc=ncc)
+                        data, info['rm_os_active'], info['cc_active'] = reduce_data(mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode, mtx=mtx, ncc=ncc)
                     data = data.flatten()
                     if zfp:
                         data = pyzfp.compress(data.view('float32'), tolerance=zfp_tol, precision=zfp_prec, parallel=True)
@@ -455,12 +468,14 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
                         data = data.view('uint64')
                     if len(mdb.channel_hdr) > 0:
                         mdb.channel_hdr[0]['ulScanCounter'] = mdb.mdh['ulScanCounter']
-                        grp.coil_info[mdb_key,:] = np.frombuffer(mdb.channel_hdr[0], dtype = 'uint8')
-                        for coil_key, coil_item in enumerate(mdb.channel_hdr):
-                            grp.coil_list[mdb_key, coil_key] = coil_item['ulChannelId']
+                        info['coil_info'] = mdb.channel_hdr[0]
+                        coil_list = np.asarray([item['ulChannelId'] for item in mdb.channel_hdr], dtype='uint8')
+                        info['coil_list'][:len(coil_list)] = coil_list
 
                 # write data
                 grp.DATA.append(data)
+                # grp.info[mdb_key] = np.frombuffer(info, dtype='uint8')
+                grp.info[mdb_key] = np.frombuffer(info, dtype='uint64')
         
         f.root._v_attrs.scanlist = scanlist    
             
@@ -472,6 +487,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
     print("compression factor = %.2f"%(os.path.getsize(infile)/os.path.getsize(outfile)))
 
 
+@profile
 def reconstruct_twix(infile, outfile=None):
     #wip: function takes no parameters, all necessary information needs to be included in hdf file
     def write_sync_bytes(f):
@@ -520,19 +536,18 @@ def reconstruct_twix(infile, outfile=None):
             # keep track of byte pos
             scan_pos.append(fout.tell())
 
-            # get compression info
-            rm_os_active = getattr(f.root,scan).rm_os_active[()]
-            cc_active = getattr(f.root,scan).cc_active[()]
-
             # write header
             getattr(f.root,scan).hdr_str[()].tofile(fout)
 
-            mdh_info = np.frombuffer(getattr(f.root,scan).mdh_info[()], mdh_def.scan_hdr_type)
-            for mdh_key, raw_mdh in enumerate(mdh_info):
-
+            for mdh_key, raw_info in enumerate(getattr(f.root,scan).info[()]):
+                info = np.frombuffer(raw_info, dtype=datinfo_type)[0]
+                
                 # write mdh
-                mdh = np.frombuffer(raw_mdh, mdh_def.scan_hdr_type)[0]
+                mdh = info['mdh_info']
                 mdh.tofile(fout)
+
+                rm_os_active = info['rm_os_active']
+                cc_active = info['cc_active']
 
                 # write data
                 is_bytearray = mdh_def.is_flag_set(mdh, 'ACQEND') or mdh_def.is_flag_set(mdh, 'SYNCDATA')
@@ -543,10 +558,10 @@ def reconstruct_twix(infile, outfile=None):
                     n_sampl = mdh['ushSamplesInScan']
                     n_coil = mdh['ushUsedChannels']
                     n_data_sampl = n_sampl
-                    if rm_os_active[mdh_key]:
+                    if rm_os_active:
                         n_data_sampl //= 2
                     n_data_coils = n_coil
-                    if cc_mode and cc_active[mdh_key]:
+                    if cc_mode and cc_active:
                         n_data_coils = inv_mtx.shape[-1]
                         if cc_mode == 'scc_bart' or cc_mode == 'gcc_bart':
                             n_data_coils = f.root._v_attrs.ncc
@@ -560,20 +575,23 @@ def reconstruct_twix(infile, outfile=None):
                     data = np.ascontiguousarray(data).view('complex64')
                     data = data.reshape(n_data_coils, n_data_sampl)
                     if cc_mode and cc_active[mdh_key]:
-                        data = expand_data(data, mdh, rm_os_active[mdh_key], cc_mode=cc_mode, inv_mtx=inv_mtx)
+                        data = expand_data(data, mdh, rm_os_active, cc_mode=cc_mode, inv_mtx=inv_mtx)
                     else:
-                        data = expand_data(data, mdh, rm_os_active[mdh_key], cc_mode=False)
-                        
+                        data = expand_data(data, mdh, rm_os_active, cc_mode=False)
 
                     data = data.reshape((n_coil, -1))
-                    coil_hdr = np.frombuffer(getattr(f.root,scan).coil_info[mdh_key,:], mdh_def.channel_hdr_type)[0].copy()
-                    coil_idx = getattr(f.root,scan).coil_list[mdh_key]
-                    for c in range(data.shape[0]):
-                        #write channel header
-                        coil_hdr['ulChannelId'] = coil_idx[c]
-                        coil_hdr.tofile(fout)
-                        # write data
-                        data[c].tofile(fout)
+                    coil_hdr = info['coil_info']
+                    
+                    buffer = bytes()
+                    for cha, cha_id in enumerate(info['coil_list'][:data.shape[0]]):
+                        #write channel id to buffer
+                        coil_hdr['ulChannelId'] = cha_id
+                        buffer += coil_hdr.tobytes()
+                        # write data to buffer
+                        buffer += data[cha].tobytes()
+
+                    # write buffer to file
+                    fout.write(buffer)
 
             # update scan_len
             scan_len.append(fout.tell() - scan_pos[-1])
@@ -675,8 +693,6 @@ if __name__ == "__main__":
 
     if args.decompress:
         if args.profile:
-            import cProfile
-            import pstats
             cProfile.run('reconstruct_twix(args.infile, args.outfile)','stats_decompr')
             p = pstats.Stats('stats_decompr')
             p.strip_dirs().sort_stats('cumulative').print_stats(15)  
@@ -700,8 +716,6 @@ if __name__ == "__main__":
             cc_mode = 'gcc_bart'
     
         if args.profile:
-            import cProfile
-            import pstats
             cProfile.run('compress_twix(args.infile, args.outfile, remove_os=args.remove_os, cc_mode=cc_mode, ncc=args.ncc, cc_tol=args.cc_tol, zfp=args.zfp, zfp_tol=args.zfp_tol, zfp_prec=args.zfp_prec, rm_fidnav=args.remove_fidnav)','stats_compr')
             p = pstats.Stats('stats_compr')
             p.strip_dirs().sort_stats('cumulative').print_stats(15)    

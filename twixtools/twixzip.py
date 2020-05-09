@@ -572,7 +572,8 @@ def reconstruct_twix(infile, outfile=None):
                     
                     data = np.ascontiguousarray(data).view('complex64')
                     data = data.reshape(n_data_coils, n_data_sampl)
-                    if cc_mode and cc_active[mdh_key]:
+
+                    if cc_mode and cc_active:
                         data = expand_data(data, mdh, rm_os_active, cc_mode=cc_mode, inv_mtx=inv_mtx)
                     else:
                         data = expand_data(data, mdh, rm_os_active, cc_mode=False)

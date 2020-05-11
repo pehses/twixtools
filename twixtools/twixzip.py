@@ -61,14 +61,14 @@ def to_freqdomain(data, x_in_timedomain):
     if not x_in_timedomain:
         return data, False
     else:
-        return np.fft.ifft(data), False
+        return np.fft.ifft(np.fftshift(data)), False
 
 
 def to_timedomain(data, x_in_timedomain):
     if x_in_timedomain:
         return data, True
     else:
-        return np.fft.fft(data), True
+        return np.ifftshift(np.fft.fft(data)), True
 
 
 def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
@@ -87,16 +87,16 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
     if cc_mode and mtx is not None and data.shape[0]==mtx.shape[-1]:
         cc_active = True
 
-    reflect_data = False
-    if rm_os_active or (cc_active and (cc_mode=='gcc' or cc_mode=='gcc_bart')):
-        reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
-        if reflect_data:
-            data = data[:,::-1]
-    
     if rm_os_active:
         nx = data.shape[-1]
         data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
         data = np.delete(data, slice(nx//4, nx*3//4), -1)
+
+    reflect_data = False
+    if (cc_active and (cc_mode=='gcc' or cc_mode=='gcc_bart')):
+        reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
+        if reflect_data:
+            data = data[:,::-1]
 
     if cc_active:
         if cc_mode=='scc' or cc_mode=='gcc':
@@ -126,11 +126,11 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
                     else:
                         data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx)
                 data = np.swapaxes(np.squeeze(data),0,1)
-
-    data, x_in_timedomain = to_timedomain(data, x_in_timedomain)
     
     if reflect_data:
         data = data[:,::-1]
+    
+    data, x_in_timedomain = to_timedomain(data, x_in_timedomain)
 
     return np.complex64(data), rm_os_active, cc_active
 
@@ -146,8 +146,9 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
     nc, nx = data.shape
 
     x_in_timedomain = True
+
     reflect_data = False
-    if remove_os or cc_mode=='gcc' or cc_mode=='gcc_bart':
+    if cc_mode=='gcc' or cc_mode=='gcc_bart':
         # for performance reasons, x dim was stored in freq. domain
         reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
         if reflect_data:
@@ -180,12 +181,12 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
                 data = bart.bart(1, 'ccapply -G -u', data, inv_mtx) 
             data = np.swapaxes(np.squeeze(data),0,1)
 
+    if reflect_data:
+        data = data[:,::-1]
+
     if remove_os:
         data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
         data = np.insert(data, nx//2, np.zeros((nx, 1), dtype=data.dtype), -1)
-        
-    if reflect_data:
-        data = data[:,::-1]
 
     data, x_in_timedomain = to_timedomain(data, x_in_timedomain)
 

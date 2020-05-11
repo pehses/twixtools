@@ -57,18 +57,18 @@ class suppress_stdout_stderr(object):
             os.close(fd)
 
 
-def to_freqdomain(data, x_in_timedomain):
+def to_freqdomain(data, x_in_timedomain=True):
     if not x_in_timedomain:
         return data, False
     else:
-        return np.fft.ifft(np.fftshift(data)), False
+        return np.fft.ifft(np.fft.fftshift(data)), False
 
 
-def to_timedomain(data, x_in_timedomain):
+def to_timedomain(data, x_in_timedomain=False):
     if x_in_timedomain:
         return data, True
     else:
-        return np.ifftshift(np.fft.fft(data)), True
+        return np.fft.ifftshift(np.fft.fft(data)), True
 
 
 def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
@@ -92,11 +92,7 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
         data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
         data = np.delete(data, slice(nx//4, nx*3//4), -1)
 
-    reflect_data = False
-    if (cc_active and (cc_mode=='gcc' or cc_mode=='gcc_bart')):
-        reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
-        if reflect_data:
-            data = data[:,::-1]
+    reflect_flag = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
 
     if cc_active:
         if cc_mode=='scc' or cc_mode=='gcc':
@@ -110,8 +106,12 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
                     cc_active = False
                 else:
                     data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
-                    for x in range(nx):
-                        data[:ncc,x] = mtx[x] @ data[:,x]
+                    if reflect_flag:
+                        for x in range(nx):
+                            data[:ncc,x] = mtx[:-x] @ data[:,x]
+                    else:
+                        for x in range(nx):
+                            data[:ncc,x] = mtx[x] @ data[:,x]
                     data = data[:ncc,:]
         else:
             with suppress_stdout_stderr():
@@ -124,11 +124,11 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
                         # nx mismatch; deactivate cc mode
                         cc_active = False
                     else:
-                        data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx)
+                        if reflect_flag:
+                            data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx[::-1])
+                        else:
+                            data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx)
                 data = np.swapaxes(np.squeeze(data),0,1)
-    
-    if reflect_data:
-        data = data[:,::-1]
     
     data, x_in_timedomain = to_timedomain(data, x_in_timedomain)
 
@@ -328,13 +328,13 @@ def get_cal_data(meas, remove_os):
             cal_data = np.zeros((len(cal_list), mode_c, mode_x), dtype=np.complex64)
         for cnt, mdb_idx in enumerate(cal_list):
             data = meas['mdb'][mdb_idx].data
-            if meas['mdb'][mdb_idx].is_flag_set('REFLECT'):
-                data = data[:,::-1]
             if remove_os:
-                data = np.fft.ifft(data)
+                data, _ = to_freqdomain(data)
                 nx = data.shape[-1]
                 data = np.delete(data, slice(nx//4, nx*3//4), -1)
-                data = np.fft.fft(data)
+                data, _ = to_timedomain(data)
+            if meas['mdb'][mdb_idx].is_flag_set('REFLECT'):
+                data = data[:,::-1]
             cal_data[cnt, :, :] = data
 
     return cal_data

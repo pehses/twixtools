@@ -50,7 +50,7 @@ class Mdb_base(object):
         return mdh_def.is_flag_set(self.mdh, flag)
 
     def get_flag(self, flag):
-        return mdh.get_flag(self.mdh, flag)
+        return mdh_def.get_flag(self.mdh, flag)
 
     def set_flag(self, flag, val):
         mdh_def.set_flag(self.mdh, flag, val)

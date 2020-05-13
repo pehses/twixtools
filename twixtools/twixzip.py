@@ -92,7 +92,11 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
         data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
         data = np.delete(data, slice(nx//4, nx*3//4), -1)
 
-    reflect_flag = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
+    reflect_data = False
+    if (cc_active and (cc_mode=='gcc' or cc_mode=='gcc_bart')):
+        reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
+        if reflect_data:
+            data = data[:,::-1]
 
     if cc_active:
         if cc_mode=='scc' or cc_mode=='gcc':
@@ -106,12 +110,8 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
                     cc_active = False
                 else:
                     data, x_in_timedomain = to_freqdomain(data, x_in_timedomain)
-                    if reflect_flag:
-                        for x in range(nx):
-                            data[:ncc,x] = mtx[:-x] @ data[:,x]
-                    else:
-                        for x in range(nx):
-                            data[:ncc,x] = mtx[x] @ data[:,x]
+                    for x in range(nx):
+                        data[:ncc,x] = mtx[x] @ data[:,x]
                     data = data[:ncc,:]
         else:
             with suppress_stdout_stderr():
@@ -124,13 +124,13 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
                         # nx mismatch; deactivate cc mode
                         cc_active = False
                     else:
-                        if reflect_flag:
-                            data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx[::-1])
-                        else:
-                            data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx)
+                        data = bart.bart(1, 'ccapply -G -p '+str(ncc), data, mtx)
                 data = np.swapaxes(np.squeeze(data),0,1)
     
     data, x_in_timedomain = to_timedomain(data, x_in_timedomain)
+
+    if reflect_data:
+        data = data[:,::-1]
 
     return np.complex64(data), rm_os_active, cc_active
 
@@ -170,7 +170,7 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
             # pad missing channels in data with zeros
             data = np.pad(data, [(0, nc-ncc), (0, 0)])
             for x in range(nx):
-                data[:,x] = inv_mtx[x,:,:] @ data[:ncc,x]
+                data[:,x] = inv_mtx[x] @ data[:ncc,x]
     elif cc_mode=='scc_bart' or cc_mode=='gcc_bart':
         with suppress_stdout_stderr():
             # BART data format: [nx,ny,nz,nc]
@@ -329,10 +329,10 @@ def get_cal_data(meas, remove_os):
         for cnt, mdb_idx in enumerate(cal_list):
             data = meas['mdb'][mdb_idx].data
             if remove_os:
-                data, _ = to_freqdomain(data)
+                data,_ = to_freqdomain(data)
                 nx = data.shape[-1]
                 data = np.delete(data, slice(nx//4, nx*3//4), -1)
-                data, _ = to_timedomain(data)
+                data,_ = to_timedomain(data)
             if meas['mdb'][mdb_idx].is_flag_set('REFLECT'):
                 data = data[:,::-1]
             cal_data[cnt, :, :] = data

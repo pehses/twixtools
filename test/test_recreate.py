@@ -15,30 +15,32 @@ def md5(fname):
     return hash_md5.digest()
 
 
-class Lossless_Test(unittest.TestCase):
+class test_lossless(unittest.TestCase):
 
     def test(self):
         infile = 'test/singlechannel.dat'
         md5_orig = md5(infile)
 
-        with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5, tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
-            twixzip.compress_twix(infile=infile, outfile=out_h5.name)
-            twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
+        with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
+            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name)
+                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
             md5_new = md5(out_dat.name)
 
         self.assertEqual(md5_orig, md5_new, 'lossless compression: md5 hash does not match with original')
 
 
-class ZFP_Test(unittest.TestCase):
+class test_zfp(unittest.TestCase):
 
     def test(self):
         infile = 'test/singlechannel.dat'
         sz_orig = os.path.getsize(infile)
 
         zfp_tol = 1e-5
-        with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5, tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
-            twixzip.compress_twix(infile=infile, outfile=out_h5.name, zfp=True, zfp_tol=zfp_tol)
-            twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
+        with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
+            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name, zfp=True, zfp_tol=zfp_tol)
+                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
 
             self.assertEqual(sz_orig, os.path.getsize(out_dat.name), 'zfp: file size not equal to original')
             
@@ -58,15 +60,88 @@ class ZFP_Test(unittest.TestCase):
                 self.assertTrue(np.allclose(mdb_orig.data, mdb_new.data, atol=zfp_tol), 'zfp: mdb data not within zfp tolerance')
 
 
-class remove_os_Test(unittest.TestCase):
+class test_remove_os(unittest.TestCase):
 
     def test(self):
         infile = 'test/singlechannel.dat'
         sz_orig = os.path.getsize(infile)
 
-        with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5, tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
-            twixzip.compress_twix(infile=infile, outfile=out_h5.name, remove_os=True)
-            twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
+        with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
+            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name, remove_os=True)
+                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
             sz_new = os.path.getsize(out_dat.name)
 
         self.assertEqual(sz_orig, sz_new, 'remove_os: file size not equal to original')
+
+
+class test_scc(unittest.TestCase):
+
+    def test(self):
+        infile = 'test/multichannel.dat'
+
+        with suppress_stdout_stderr():
+            twix_orig = read_twix(infile)[-1]
+        
+        nc = twix_orig['mdb'][1].mdh['ushUsedChannels']
+
+        with tempfile.NamedTemporaryFile(suffix='.dat') as out_python, tempfile.NamedTemporaryFile(suffix='.dat') as out_bart:
+            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='scc', ncc=nc)
+                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_python.name)
+
+            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='scc_bart', ncc=nc)
+                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_bart.name)
+            
+            with suppress_stdout_stderr():
+                twix_orig = read_twix(infile)[-1]
+                twix_python = read_twix(out_python.name)[-1]
+                twix_bart = read_twix(out_bart.name)[-1]
+
+            for mdb_orig, mdb_python, mdb_bart in zip(twix_orig['mdb'], twix_python['mdb'], twix_bart['mdb']):
+                if mdb_orig.is_flag_set('ACQEND'):
+                    continue
+                elif mdb_orig.is_flag_set('SYNCDATA'):
+                    continue
+
+                self.assertTrue(mdb_orig.mdh == mdb_python.mdh, 'scc: mdhs do not match')
+                self.assertTrue(mdb_orig.mdh == mdb_bart.mdh, 'scc bart: mdhs do not match')
+                self.assertTrue(np.allclose(mdb_orig.data, mdb_python.data), 'scc: mdb data not within tolerance')
+                self.assertTrue(np.allclose(mdb_orig.data, mdb_bart.data), 'scc bart: mdb data not within tolerance')
+
+
+class test_gcc(unittest.TestCase):
+
+    def test(self):
+        infile = 'test/multichannel.dat'
+
+        with suppress_stdout_stderr():
+            twix_orig = read_twix(infile)[-1]
+        
+        nc = twix_orig['mdb'][1].mdh['ushUsedChannels']
+
+        with tempfile.NamedTemporaryFile(suffix='.dat') as out_python, tempfile.NamedTemporaryFile(suffix='.dat') as out_bart:
+            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='gcc', ncc=nc)
+                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_python.name)
+
+            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='gcc_bart', ncc=nc)
+                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_bart.name)
+            
+            with suppress_stdout_stderr():
+                twix_orig = read_twix(infile)[-1]
+                twix_python = read_twix(out_python.name)[-1]
+                twix_bart = read_twix(out_bart.name)[-1]
+
+            for mdb_orig, mdb_python, mdb_bart in zip(twix_orig['mdb'], twix_python['mdb'], twix_bart['mdb']):
+                if mdb_orig.is_flag_set('ACQEND'):
+                    continue
+                elif mdb_orig.is_flag_set('SYNCDATA'):
+                    continue
+
+                self.assertTrue(mdb_orig.mdh == mdb_python.mdh, 'gcc: mdhs do not match')
+                self.assertTrue(mdb_orig.mdh == mdb_bart.mdh, 'gcc bart: mdhs do not match')
+                self.assertTrue(np.allclose(mdb_orig.data, mdb_python.data), 'gcc: mdb data not within tolerance')
+                self.assertTrue(np.allclose(mdb_orig.data, mdb_bart.data), 'gcc bart: mdb data not within tolerance')

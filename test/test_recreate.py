@@ -85,30 +85,23 @@ class test_scc(unittest.TestCase):
         
         nc = twix_orig['mdb'][1].mdh['ushUsedChannels']
 
-        with tempfile.NamedTemporaryFile(suffix='.dat') as out_python, tempfile.NamedTemporaryFile(suffix='.dat') as out_bart:
+        with tempfile.NamedTemporaryFile(suffix='.dat') as out_python:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
                 twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='scc', ncc=nc)
                 twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_python.name)
-
-            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
-                twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='scc_bart', ncc=nc)
-                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_bart.name)
             
             with suppress_stdout_stderr():
                 twix_orig = read_twix(infile)[-1]
                 twix_python = read_twix(out_python.name)[-1]
-                twix_bart = read_twix(out_bart.name)[-1]
 
-            for mdb_orig, mdb_python, mdb_bart in zip(twix_orig['mdb'], twix_python['mdb'], twix_bart['mdb']):
+            for mdb_orig, mdb_python in zip(twix_orig['mdb'], twix_python['mdb']):
                 if mdb_orig.is_flag_set('ACQEND'):
                     continue
                 elif mdb_orig.is_flag_set('SYNCDATA'):
                     continue
 
                 self.assertTrue(mdb_orig.mdh == mdb_python.mdh, 'scc: mdhs do not match')
-                self.assertTrue(mdb_orig.mdh == mdb_bart.mdh, 'scc bart: mdhs do not match')
                 self.assertTrue(np.allclose(mdb_orig.data, mdb_python.data), 'scc: mdb data not within tolerance')
-                self.assertTrue(np.allclose(mdb_orig.data, mdb_bart.data), 'scc bart: mdb data not within tolerance')
 
 
 class test_gcc(unittest.TestCase):
@@ -121,27 +114,20 @@ class test_gcc(unittest.TestCase):
         
         nc = twix_orig['mdb'][1].mdh['ushUsedChannels']
 
-        with tempfile.NamedTemporaryFile(suffix='.dat') as out_python, tempfile.NamedTemporaryFile(suffix='.dat') as out_bart:
+        with tempfile.NamedTemporaryFile(suffix='.dat') as out_python:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
                 twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='gcc', ncc=nc)
                 twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_python.name)
-
-            with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
-                twixzip.compress_twix(infile=infile, outfile=out_h5.name, cc_mode='gcc_bart', ncc=nc)
-                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_bart.name)
             
             with suppress_stdout_stderr():
                 twix_orig = read_twix(infile)[-1]
                 twix_python = read_twix(out_python.name)[-1]
-                twix_bart = read_twix(out_bart.name)[-1]
 
-            for mdb_orig, mdb_python, mdb_bart in zip(twix_orig['mdb'], twix_python['mdb'], twix_bart['mdb']):
+            for mdb_orig, mdb_python in zip(twix_orig['mdb'], twix_python['mdb']):
                 if mdb_orig.is_flag_set('ACQEND'):
                     continue
                 elif mdb_orig.is_flag_set('SYNCDATA'):
                     continue
 
                 self.assertTrue(mdb_orig.mdh == mdb_python.mdh, 'gcc: mdhs do not match')
-                self.assertTrue(mdb_orig.mdh == mdb_bart.mdh, 'gcc bart: mdhs do not match')
                 self.assertTrue(np.allclose(mdb_orig.data, mdb_python.data), 'gcc: mdb data not within tolerance')
-                self.assertTrue(np.allclose(mdb_orig.data, mdb_bart.data), 'gcc bart: mdb data not within tolerance')

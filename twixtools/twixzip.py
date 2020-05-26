@@ -57,18 +57,18 @@ class suppress_stdout_stderr(object):
             os.close(fd)
 
 
-def to_freqdomain(data, x_in_timedomain=True):
+def to_freqdomain(data, x_in_timedomain=True, axis=-1):
     if not x_in_timedomain:
         return data, False
     else:
-        return np.fft.ifft(np.fft.fftshift(data)), False
+        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(data, axes=[axis]), axis=axis), axes=[axis]), False
 
 
-def to_timedomain(data, x_in_timedomain=False):
+def to_timedomain(data, x_in_timedomain=False, axis=-1):
     if x_in_timedomain:
         return data, True
     else:
-        return np.fft.ifftshift(np.fft.fft(data)), True
+        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(data, axes=[axis]), axis=axis), axes=[axis]), True
 
 
 def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
@@ -227,26 +227,26 @@ def calculate_prewhitening(noise, scale_factor=1.0):
 
 def scc_calibrate_mtx(data):
     nc = data.shape[1]
-    data = np.moveaxis(data,1,-1)
-    data = data.flatten().reshape((-1, nc))
-    _, s, V = np.linalg.svd(data, full_matrices=False)
-    V = np.conj(V)
-    return V[np.newaxis, :, :], s
+    data = np.moveaxis(data,1,0)
+    data = data.flatten().reshape((nc, -1))
+    U, s, V = np.linalg.svd(data, full_matrices=False)
+    mtx = np.conj(U.T)
+    return mtx[np.newaxis, :, :], s
 
 
 def gcc_calibrate_mtx(data):
     nc, nx = data.shape[1:]
-    data = np.moveaxis(data,1,-1)
-    im = np.fft.ifft(data, axis=1)
+    data = np.moveaxis(data,1,0)
+    im = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(data), axis=-1))
     mtx = np.zeros((nx, nc, nc),dtype = 'complex64')
     s = np.zeros((nx, nc), dtype='float32')
     for x in range(nx):
-        _, s[x], V = np.linalg.svd(im[:,x,:], full_matrices=False)
-        mtx[x,:,:] = np.conj(V)
+        U, s[x], V = np.linalg.svd(im[:,:,x], full_matrices=False)
+        mtx[x,] = np.conj(U.T)
     return mtx, s.mean(axis=0)
 
 
-def calibrate_mtx(data, cc_mode):
+def calibrate_mtx(data, cc_mode, ncc, cc_tol):
     if cc_mode == 'scc':
         mtx, s = scc_calibrate_mtx(data)
     elif cc_mode == 'gcc':
@@ -254,7 +254,21 @@ def calibrate_mtx(data, cc_mode):
     else:
         print('unknown cc_mode "%s"'%(cc_mode))
         raise ValueError
-    return mtx, s
+
+    if ncc is None:
+        ncc = 1 + np.argwhere(np.cumsum(s)/s.sum() > (1-cc_tol))[0,0]
+    mtx = mtx[:,:ncc, :]
+
+    if cc_mode == 'gcc':
+        nx = mtx.shape[0]
+        for k in range(nx-1):
+            # additional alignment step (Paper Zhang, MRM, 2012) 
+            Cx = np.matmul(mtx[k+1,], np.conj(mtx[k,].T))
+            Uc, sc, vhc = np.linalg.svd(Cx)
+            Px = np.matmul(np.conj(vhc.T), np.conj(Uc.T))
+            mtx[k+1,] = np.matmul(Px, mtx[k+1,])
+
+    return mtx, ncc
 
 
 def calibrate_mtx_bart(data, cc_mode):
@@ -262,10 +276,10 @@ def calibrate_mtx_bart(data, cc_mode):
     data = np.expand_dims(np.moveaxis(data,-1,0),2) 
     if cc_mode == 'scc_bart':
         with suppress_stdout_stderr():
-            mtx = bart.bart(1, 'cc -S -M', data)
+            mtx = bart.bart(1, 'cc -S -A -M', data)
     elif cc_mode == 'gcc_bart':
         with suppress_stdout_stderr():
-            mtx = bart.bart(1, 'cc -G -M', data)
+            mtx = bart.bart(1, 'cc -G -A -M', data)
     else:
         print('unknown cc_mode "%s"'%(cc_mode))
         raise ValueError
@@ -377,11 +391,8 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
         # use the calibration coil weights for all data that fits
         cal_data = get_cal_data(twix[-1], remove_os)
         if cc_mode=='scc' or cc_mode=='gcc':
-            mtx, s = calibrate_mtx(cal_data, cc_mode)
+            mtx, ncc = calibrate_mtx(cal_data, cc_mode, ncc, cc_tol)
             del(cal_data)
-            if ncc is None:
-                ncc = 1 + np.argwhere(np.cumsum(s)/s.sum() > (1-cc_tol))[0,0]
-            mtx = mtx[:,:ncc, :]
             print('coil compression from %d channels to %d virtual channels'%(mtx.shape[-1], ncc))
         else:
             mtx = calibrate_mtx_bart(cal_data, cc_mode)

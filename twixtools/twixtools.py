@@ -138,6 +138,9 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             # write header
             scan['hdr_str'].tofile(fid)
 
+            # make sure that scan counters are consecutive integers
+            fix_scancounters(scan['mdb'])
+
             # write mdbs
             for mdb in scan['mdb']:
                 # write mdh
@@ -187,10 +190,19 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             fid.seek(0)
             multi_header.tofile(fid)
 
-
 import copy
 
+
+def fix_scancounters(mdb_list, start_cnt=0):
+    # ulScanCounters in mdb_list must be consecutive integers
+    for cnt, mdb in enumerate(mdb_list, start_cnt):
+        mdb.mdh['ulScanCounter'] = cnt
+        for cha in mdb.channel_hdr:
+            cha['ulScanCounter'] = cnt
+
+
 class twix_array(dict):
+    # WIP: not ready yet
     def __init__(self, mdb_list):
         super(twix_array, self).__init__({key:list() for key in ['ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN', 'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60', 'PATREFSCAN', 'IMASCAN']})
         self.mdb_list = copy.deepcopy(mdb_list)

@@ -12,9 +12,7 @@ import twixtools
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
 import pyzfp
-import bart
-import cProfile
-import pstats
+
 
 # profiler workaround:
 # make sure that @profile does not result in error when line_profiler is not in use
@@ -72,6 +70,9 @@ def to_timedomain(data, x_in_timedomain=False, axis=-1):
 
 
 def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
+
+    if cc_mode=='scc_bart' or cc_mode=='gcc_bart':
+        import bart
 
     if data.dtype == np.dtype("S1"):
         # nothing to do in case of bytearray
@@ -136,10 +137,13 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
 
 
 def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
-      
+
+    if cc_mode=='scc_bart' or cc_mode=='gcc_bart':
+        import bart
+ 
     if data.dtype == np.dtype("S1"):
         return data # nothing to do in case of bytearray
-    
+
     if inv_mtx is None:
         inv_mtx = False
 
@@ -153,7 +157,7 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
         reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
         if reflect_data:
             data = data[:,::-1]
-    
+
     if cc_mode=='scc' or cc_mode=='gcc':
         nc = inv_mtx.shape[1]
         ncc = inv_mtx.shape[-1]
@@ -701,6 +705,10 @@ if __name__ == "__main__":
         parser.add_argument("--profile", action="store_true")
 
     args = parser.parse_args()
+
+    if args.profile
+        import cProfile
+        import pstats
 
     if args.decompress:
         if args.profile:

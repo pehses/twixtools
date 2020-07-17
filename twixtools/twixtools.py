@@ -10,7 +10,7 @@ import twixtools.mdb
 import twixtools.hdr_def as hdr_def
 
 
-def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
+def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_scans=None):
     """Function for reading siemens twix raw data files."""
     if isinstance(infile, str):
         # assume that complete path is given
@@ -58,6 +58,10 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
         measLength = [fileSize]
 
     for s in range(NScans):
+        if include_scans is not None and s not in include_scans:
+            # skip scan if it is not requested
+            continue
+            
         scanStart = measOffset[s]
         scanEnd = scanStart + measLength[s]
         pos = measOffset[s]

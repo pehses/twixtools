@@ -100,7 +100,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True):
                 break
             
 
-    # fid.close()
+    fid.close()
 
     return out
 
@@ -138,7 +138,8 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             # write header
             scan['hdr_str'].tofile(fid)
 
-            acq_end_len = 0
+            # make sure that scan counters are consecutive integers
+            fix_scancounters(scan['mdb'])
 
             # write mdbs
             for mdb in scan['mdb']:
@@ -146,11 +147,8 @@ def write_twix(scanlist, outfile, version_is_ve=True):
                 mdb.mdh.tofile(fid)
                 data = np.atleast_2d(mdb.data)
                 if version_is_ve:
-                    if mdb.is_flag_set('SYNCDATA'):
+                    if mdb.is_flag_set('SYNCDATA') or mdb.is_flag_set('ACQEND'):
                         data.tofile(fid)
-                    elif mdb.is_flag_set('ACQEND'):
-                        data.tofile(fid)
-                        acq_end_len = 192
                     else:
                         for c in range(data.shape[0]):
                             #write channel header
@@ -163,7 +161,7 @@ def write_twix(scanlist, outfile, version_is_ve=True):
                     data[c].tofile(fid)
 
             # update scan_len
-            scan_len.append(fid.tell() - scan_pos[-1] - acq_end_len)
+            scan_len.append(fid.tell() - scan_pos[-1])
 
             # add sync bytes between scans
             write_sync_bytes(fid)
@@ -177,7 +175,7 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             else:
                 # start from scratch
                 multi_header = np.zeros(1, dtype=MultiRaidFileHeader)[0]
-                for k in range(n_scans):
+                for _ in range(n_scans):
                     multi_header['entry']['patName_'] = b'x'*45
                     multi_header['entry']['protName_'] = b'noname'
 
@@ -191,3 +189,54 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             # write MultiRaidFileHeader
             fid.seek(0)
             multi_header.tofile(fid)
+
+import copy
+
+
+def fix_scancounters(mdb_list, start_cnt=0):
+    # ulScanCounters in mdb_list must be consecutive integers
+    for cnt, mdb in enumerate(mdb_list, start_cnt):
+        mdb.mdh['ulScanCounter'] = cnt
+        for cha in mdb.channel_hdr:
+            cha['ulScanCounter'] = cnt
+
+
+class twix_array(dict):
+    # WIP: not ready yet
+    def __init__(self, mdb_list):
+        super(twix_array, self).__init__({key:list() for key in ['ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN', 'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60', 'PATREFSCAN', 'IMASCAN']})
+        self.mdb_list = copy.deepcopy(mdb_list)
+        self.sLC = dict()
+        self.mdb_shape = dict()
+        self.parse()
+        
+
+    def parse(self):
+        self.sLC = {key:list() for key in self.keys()}
+        self.mdb_shape = {key:list() for key in self.keys()}
+        for mdb in self.mdb_list:
+            if mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'):
+                continue
+            for cat in list(self.keys())[:-1]:
+                if mdb.is_flag_set(cat):
+                    self.get(cat).append(mdb)
+                    self.sLC[cat].append(mdb.mdh['sLC'])
+                    self.mdb_shape[cat].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
+            if mdb.is_image_scan():
+                self['IMASCAN'].append(mdb)
+                self.sLC['IMASCAN'].append(mdb.mdh['sLC'])
+                self.mdb_shape['IMASCAN'].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
+        
+        for cat in list(self.keys()):
+            if len(self.get(cat))==0:
+                # remove empty categories
+                del(self[cat])
+                del(self.sLC[cat])
+                del(self.mdb_shape[cat])
+            else:
+                # add category to self
+                pass
+
+
+    # def __getitem__(self, index):
+    #     pass

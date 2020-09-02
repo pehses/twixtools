@@ -57,6 +57,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
         measOffset = [np.uint64(0)]
         measLength = [fileSize]
 
+    print('')
     for s in range(NScans):
         if include_scans is not None and s not in include_scans:
             # skip scan if it is not requested
@@ -82,7 +83,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
 
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos
-        print('\nscan ', s)
+        print('Scan ', s)
         helpers.update_progress(pos - scanStart, scanEnd - scanStart, True)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
             helpers.update_progress(pos - scanStart, scanEnd - scanStart, False)
@@ -102,7 +103,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
 
             if mdb.is_flag_set('ACQEND'):
                 break
-            
+
+        print('')
 
     fid.close()
 

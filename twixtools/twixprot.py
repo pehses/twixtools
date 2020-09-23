@@ -49,7 +49,10 @@ def twixprot(f, hdr_len, version_is_ve):
                     elif key.startswith(('ad', 'afl')):
                         val = float(val)
                     elif key.startswith(('auc', 'aui', 'aul', 'aun')):
-                        val = int(val, 16)
+                        try:
+                            val = int(val)
+                        except:
+                            val = int(val, 16)
                     else:
                         val = val.strip('"')
                     for k in range(len(cConv[key]) - 1, index - 1):
@@ -67,8 +70,11 @@ def twixprot(f, hdr_len, version_is_ve):
                         val = int(float(val))
                     elif key.startswith(('d', 'fl')):
                         val = float(val)
-                    elif key.startswith(('uc', 'ui', 'ul', 'un', 'e', 'size')):
-                        val = int(val, 16)
+                    elif key.startswith(('uc', 'ui', 'ul','un', 'e', 'size')):
+                        try:
+                            val = int(val)
+                        except:
+                            val = int(val, 16)
                     else:
                         val = val.strip('"')
                     cConv.update({key: val})
@@ -109,7 +115,10 @@ def parse_ascconv(string):
                     elif key.startswith(('ad', 'afl')):
                         val = float(val)
                     elif key.startswith(('auc', 'aui', 'aul', 'aun')):
-                        val = int(val, 16)
+                        try:
+                            val = int(val)
+                        except:
+                            val = int(val, 16)
                     else:
                         val = val.strip('"')
                     for k in range(len(cConv[key]) - 1, index - 1):
@@ -128,7 +137,10 @@ def parse_ascconv(string):
                     elif key.startswith(('d', 'fl')):
                         val = float(val)
                     elif key.startswith(('uc', 'ui', 'ul', 'un', 'e', 'size')):
-                        val = int(val, 16)
+                        try:
+                            val = int(val)
+                        except:
+                            val = int(val, 16)
                     else:
                         val = val.strip('"')
                     cConv.update({key: val})

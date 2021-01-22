@@ -439,9 +439,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
 
             # remove fidnav scans if necessary
             if rm_fidnav:
-                for mdb_key, mdb in enumerate(meas['mdb']):
-                    if mdb.is_flag_set('noname60'):
-                        del(meas['mdb'][mdb_key])
+                twixtools.del_from_mdb_list(meas['mdb'], lambda mdb: mdb.is_flag_set('noname60'))
 
             mdh_count = len(meas['mdb'])
             

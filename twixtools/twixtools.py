@@ -211,6 +211,16 @@ def fix_scancounters(mdb_list, start_cnt=1):
         cnt += 1
 
 
+def del_from_mdb_list(mdb_list, function):
+    # helper function to safely remove multiple items from mdb_list at once
+
+    ind2remove = [key for key, mdb in enumerate(mdb_list) if function(mdb)]
+            
+    for key in sorted(ind2remove, reverse=True): 
+        del mdb_list[key]
+    
+    return
+
 class twix_array(dict):
     # WIP: not ready yet
     def __init__(self, mdb_list):

@@ -151,6 +151,7 @@ mask_id[52] = 'RETRO_ARRDETDISABLED'  # Disable all arrhythmia detection
 mask_id[53] = 'B1_CONTROLLOOP'  # readout to be used for B1 Control Loop
 mask_id[54] = 'SKIP_ONLINE_PHASCOR'  # scans not to be online phase corr.
 mask_id[55] = 'SKIP_REGRIDDING'  # Marks scans not to be regridded
+mask_id[56] = 'MDH_VOP'  # Marks the readout as to be used for VOP based RF monitoring
 mask_id[61] = 'WIP_1'  # Mark scans for WIP application "type 1"
 mask_id[62] = 'WIP_2'  # Mark scans for WIP application "type 1"
 mask_id[63] = 'WIP_3'  # Mark scans for WIP application "type 1"

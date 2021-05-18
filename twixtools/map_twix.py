@@ -1,17 +1,18 @@
+import copy
 import twixtools
+
 
 def map_twix(input):
     # creates a list of measurements
     # with data for each measurement mapped to a twix_array object
 
-    return_list = True
     if isinstance(input, list):
         # assume list of measurements
         twix = input
     elif isinstance(input, dict):
         # assume measurement dict
-        twix = [input]       # put dict into list for code compatibility
-        return_list = False  # the user probably does not expect a list, return twix_array instead
+        # return twix_array of the input (no measurement list)
+        return twix_array(input)
     else:
         # assume that this is the filename or a meas id
         twix = twixtools.read_twix(input)
@@ -21,9 +22,6 @@ def map_twix(input):
         if not isinstance(meas, dict):
             pass  # first "meas" may store first 10240 bytes of file
         out.append(twix_array(meas))
-    
-    if not return_list:
-        out = out[-1]
 
     return out
 

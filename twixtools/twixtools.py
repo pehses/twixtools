@@ -190,8 +190,6 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             fid.seek(0)
             multi_header.tofile(fid)
 
-import copy
-
 
 def fix_scancounters(mdb_list, start_cnt=1):
     # ulScanCounters in mdb_list must be consecutive integers

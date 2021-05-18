@@ -111,12 +111,6 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
     return out
 
 
-do_not_zfp_compress = ['SYNCDATA', 'ACQEND']
-do_not_remove_os = ['SYNCDATA', 'ACQEND', '__fidnav___']
-do_not_scc_compress = ['SYNCDATA', 'ACQEND', 'RTFEEDBACK']
-do_not_gcc_compress = ['SYNCDATA', 'ACQEND', 'RTFEEDBACK', 'NOISEADJSCAN', '__fidnav___']
-#'REFLECT'
-
 def write_twix(scanlist, outfile, version_is_ve=True):
     
     def write_sync_bytes(fid):
@@ -220,43 +214,3 @@ def del_from_mdb_list(mdb_list, function):
         del mdb_list[key]
     
     return
-
-class twix_array(dict):
-    # WIP: not ready yet
-    def __init__(self, mdb_list):
-        super(twix_array, self).__init__({key:list() for key in ['ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN', 'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60', 'PATREFSCAN', 'IMASCAN']})
-        self.mdb_list = copy.deepcopy(mdb_list)
-        self.sLC = dict()
-        self.mdb_shape = dict()
-        self.parse()
-        
-
-    def parse(self):
-        self.sLC = {key:list() for key in self.keys()}
-        self.mdb_shape = {key:list() for key in self.keys()}
-        for mdb in self.mdb_list:
-            if mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'):
-                continue
-            for cat in list(self.keys())[:-1]:
-                if mdb.is_flag_set(cat):
-                    self.get(cat).append(mdb)
-                    self.sLC[cat].append(mdb.mdh['sLC'])
-                    self.mdb_shape[cat].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
-            if mdb.is_image_scan():
-                self['IMASCAN'].append(mdb)
-                self.sLC['IMASCAN'].append(mdb.mdh['sLC'])
-                self.mdb_shape['IMASCAN'].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
-        
-        for cat in list(self.keys()):
-            if len(self.get(cat))==0:
-                # remove empty categories
-                del(self[cat])
-                del(self.sLC[cat])
-                del(self.mdb_shape[cat])
-            else:
-                # add category to self
-                pass
-
-
-    # def __getitem__(self, index):
-    #     pass

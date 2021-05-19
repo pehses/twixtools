@@ -12,7 +12,7 @@ import twixtools
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
 import pyzfp
-
+from twixtools.recon_helpers import to_freqdomain, to_timedomain
 
 # profiler workaround:
 # make sure that @profile does not result in error when line_profiler is not in use
@@ -53,20 +53,6 @@ class suppress_stdout_stderr(object):
         # Close all file descriptors
         for fd in self.null_fds + self.save_fds:
             os.close(fd)
-
-
-def to_freqdomain(data, x_in_timedomain=True, axis=-1):
-    if not x_in_timedomain:
-        return data, False
-    else:
-        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(data, axes=[axis]), axis=axis), axes=[axis]), False
-
-
-def to_timedomain(data, x_in_timedomain=False, axis=-1):
-    if x_in_timedomain:
-        return data, True
-    else:
-        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(data, axes=[axis]), axis=axis), axes=[axis]), True
 
 
 def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):

@@ -166,15 +166,16 @@ class twix_array():
                         raise IndexError("index %d is out of bounds for axis %d with size %d"%(i, key, self.shape[key]))
                 selection.append(item)
         
-        target_sz = self.shape.copy()
+        target_sz = self.shape.copy().tolist()
         for key, item in enumerate(selection):
             if item != slice(None):
                 target_sz[key] = len(item)
 
         out = np.zeros(target_sz, dtype='complex64')
+        out = out.reshape([-1, out.shape[-2], out.shape[-1]]) # for now 'vectorize' it
 
         # average counter to scale the data properly later
-        ave_counter = np.zeros(target_sz.tolist()[:-2], dtype=np.uint16)
+        ave_counter = np.zeros(np.prod(out.shape[:-2]), dtype=np.uint16)
 
         # now that we have our selection and allocated memory, we can read in the data
         # for this, we simply go through all mdb's and fill them in if selected
@@ -219,10 +220,25 @@ class twix_array():
             if self.flags['average_dim'][-2]:
                 data = data.mean(-2)[np.newaxis]
 
-            # # average certain dimensions if requested
-            # for dim in 
-            #     if self.flags['average_dim'][dim]:
-            #         pass
+            # ix = list()
+            ix = 0
+            for dim in range(self.ndim-2):
+                if self.flags['average_dim'][dim]:
+                    # ix.append(0)
+                    pass  # nothing to add
+                elif dim >= len(selection) or selection[dim] == slice(None):
+                    #ix.append(counters[dim])
+                    ix += counters[dim] * np.prod(target_sz[:dim])
+                else:
+                    # ix = selection[dim].index(counters[dim])
+                    ix += selection[dim].index(counters[dim]) * np.prod(target_sz[:dim])
+            
+            # out[ix[0],ix[1],ix[2],ix[3]] += data
+            ix = int(ix)
+            out[ix] += data
+
+            # increment average counter for ix
+            ave_counter[ix] += 1
 
 
 
@@ -230,4 +246,4 @@ class twix_array():
         ave_counter = np.maximum(ave_counter, 1)
         out /= ave_counter[..., np.newaxis, np.newaxis]
 
-        return out
+        return out.reshape(target_sz)

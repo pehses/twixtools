@@ -166,7 +166,7 @@ class twix_array():
                         raise IndexError("index %d is out of bounds for axis %d with size %d"%(i, key, self.shape[key]))
                 selection.append(item)
         
-        target_sz = self.shape.copy().tolist()
+        target_sz = list(self.shape.copy().tolist())
         for key, item in enumerate(selection):
             if item != slice(None):
                 target_sz[key] = len(item)
@@ -207,40 +207,40 @@ class twix_array():
             # read data
             data = mdb.data
 
+            # average cha if requested
+            if self.flags['average_dim'][-2]:
+                data = data.mean(-2, keepdims=True)
+
             # average col or apply oversampling removal if requested
             if self.flags['average_dim'][-1]:
-                data = data.mean(-1)[...,np.newaxis]
+                data = data.mean(-1, keepdims=True)
             else:
                 if self.flags['regrid']:
                     pass  # wip
                 if self.flags['remove_os']:  
                     data,_ = remove_oversampling(data)
-            
-            # average cha if requested
-            if self.flags['average_dim'][-2]:
-                data = data.mean(-2)[np.newaxis]
 
-            # ix = list()
-            ix = 0
+            ix = int(0)
             for dim in range(self.ndim-2):
                 if self.flags['average_dim'][dim]:
-                    # ix.append(0)
                     pass  # nothing to add
                 elif dim >= len(selection) or selection[dim] == slice(None):
-                    #ix.append(counters[dim])
-                    ix += counters[dim] * np.prod(target_sz[:dim])
+                    ix += int(counters[dim] * np.prod(target_sz[dim+1:-2]))
                 else:
-                    # ix = selection[dim].index(counters[dim])
-                    ix += selection[dim].index(counters[dim]) * np.prod(target_sz[:dim])
+                    ix += int(selection[dim].index(counters[dim]) * np.prod(target_sz[dim+1:-2]))
             
-            # out[ix[0],ix[1],ix[2],ix[3]] += data
-            ix = int(ix)
+            # only keep selected channels & columns
+            if len(selection) > self.ndim-2:
+                # select channels
+                data = data[selection[-2]]
+            if len(selection) > self.ndim-1:
+                # select columns
+                data = data[:,selection[-1]]
+
             out[ix] += data
 
             # increment average counter for ix
             ave_counter[ix] += 1
-
-
 
         # scale data according to ave_counter:
         ave_counter = np.maximum(ave_counter, 1)

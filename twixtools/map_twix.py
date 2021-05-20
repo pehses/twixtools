@@ -5,6 +5,27 @@ import twixtools
 from twixtools.recon_helpers import remove_oversampling
 
 
+# define categories in which the twix data should be sorted based on MDH flags that must or must not be set (True/False)
+# only one 'any' per category allowed (however, it is possible to add other appropriate functions (even synonyms for any))
+twix_category = dict()
+twix_category['image']           = {'RTFEEDBACK': False, 'HPFEEDBACK': False, 'REFPHASESTABSCAN': False, 'PHASESTABSCAN': False,
+                                    'PHASCOR': False, 'NOISEADJSCAN': False, 'noname60': False}
+twix_category['noise']           = {'NOISEADJSCAN': True}
+twix_category['phasecorr']       = {'PHASCOR': True, 'PATREFSCAN': False, 'noname60': False}
+twix_category['phasestab']       = {'PHASESTABSCAN': True, 'REFPHASESTABSCAN': False, any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}, 'noname60': False} 
+twix_category['phasestab_ref0']  = {'REFPHASESTABSCAN': True, 'PHASESTABSCAN': False, any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}, 'noname60': False} 
+twix_category['phasestab_ref1']  = {'REFPHASESTABSCAN': True, 'PHASESTABSCAN': True, any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}, 'noname60': False} 
+twix_category['refscan']         = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'PHASCOR': False, 'PHASESTABSCAN': False, 
+                                   'REFPHASESTABSCAN': False, 'RTFEEDBACK': False, 'HPFEEDBACK': False, 'noname60': False}
+twix_category['refscan_pc']      = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'PHASCOR': True}
+twix_category['refscan_ps']      = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'REFPHASESTABSCAN': False, 'PHASESTABSCAN': True}
+twix_category['refscan_ps_ref0'] = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'REFPHASESTABSCAN': True, 'PHASESTABSCAN': False}
+twix_category['refscan_ps_ref1'] = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'REFPHASESTABSCAN': True, 'PHASESTABSCAN': True}
+twix_category['rt_feedback']     = {any: {'RTFEEDBACK': True, 'HPFEEDBACK': True}, 'MDH_VOP': False}
+twix_category['vop']             = {'MDH_VOP': True}
+twix_category['fidnav']          = {'noname60': True}  # this is the real reason for including the 'noname60' check above
+
+
 def map_twix(input):
     # creates a list of measurements
     # with data for each measurement mapped to a twix_array object
@@ -15,7 +36,7 @@ def map_twix(input):
     elif isinstance(input, dict):
         # assume measurement dict
         # return twix_array of the input (no measurement list)
-        return twix_obj(input)
+        twix = [input]
     else:
         # assume that this is the filename or a meas id
         twix = twixtools.read_twix(input)
@@ -24,48 +45,49 @@ def map_twix(input):
     for meas in twix:
         if not isinstance(meas, dict):
             pass  # first "meas" may store first 10240 bytes of file
-        out.append(twix_obj(meas))
-    return out
-
-
-class twix_obj(dict):
-    # WIP: not ready yet
-    def __init__(self, meas):
-        super(twix_obj, self).__init__({key:list() for key in ['ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN', 'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60', 'PATREFSCAN', 'IMASCAN']})
-        self.mdb_list = copy.deepcopy(meas['mdb'])
-
-        self.sLC = dict()
-        self.mdb_shape = dict()
-        self.parse()
         
-
-    def parse(self):
-        self.sLC = {key:list() for key in self.keys()}
-        self.mdb_shape = {key:list() for key in self.keys()}
-        for mdb in self.mdb_list:
-            if mdb.is_flag_set('SYNCDATA'):
+        # append new dict to output list
+        out.append(dict())
+        
+        # sort mdbs into categories
+        for mdb in meas['mdb']:
+            if mdb.is_flag_set('SYNCDATA'): # ignore syncdata
                 continue
-            elif mdb.is_flag_set('ACQEND'):
+            if mdb.is_flag_set('ACQEND'):
                 break
-            for cat in list(self.keys())[:-1]:
-                if mdb.is_flag_set(cat):
-                    self.get(cat).append(mdb)
-                    self.sLC[cat].append(mdb.mdh['sLC'])
-                    self.mdb_shape[cat].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
-            if mdb.is_image_scan():
-                self['IMASCAN'].append(mdb)
-                self.sLC['IMASCAN'].append(mdb.mdh['sLC'])
-                self.mdb_shape['IMASCAN'].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
-        
-        for cat in list(self.keys()):
-            if len(self.get(cat))==0:
-                # remove empty categories
-                del(self[cat])
-                del(self.sLC[cat])
-                del(self.mdb_shape[cat])
-            else:
-                # add category to self
-                pass
+
+            for category, requirements in twix_category.items():
+                include_in_cat = True
+                for flag in requirements.keys():
+                    if isinstance(flag, str):   # simple check whether flag is set
+                        if mdb.is_flag_set(flag) != requirements[flag]:
+                            include_in_cat = False
+                            break
+                    else:  # assume that this is a function call (probably any())
+                        checks = list()
+                        for flag2 in requirements[flag].keys():
+                            checks.append(mdb.is_flag_set(flag2)==requirements[flag][flag2])
+                        if not flag(checks):
+                            include_in_cat = False
+                            break
+                if include_in_cat:
+                    if category not in out[-1]:
+                        out[-1][category] = list()
+                    out[-1][category].append(mdb)
+
+        # convert each categories' mdb list to twix_array
+        for category in out[-1].keys():
+            out[-1][category] = twix_array(out[-1][category])
+
+        # include hdr in dict
+        out[-1]['hdr'] = meas['hdr'].copy()
+        out[-1]['hdr_str'] = meas['hdr_str'].copy()
+
+        # go back to dict if input was dict
+        if isinstance(input, dict):
+            out = out[0]
+
+    return out
 
 
 class twix_array():
@@ -221,12 +243,16 @@ class twix_array():
                     data,_ = remove_oversampling(data)
 
             ix = int(0)
+            requests = 1
             for dim in range(self.ndim-2):
                 if self.flags['average_dim'][dim]:
                     pass  # nothing to add
                 elif dim >= len(selection) or selection[dim] == slice(None):
                     ix += int(counters[dim] * np.prod(target_sz[dim+1:-2]))
                 else:
+                    # wip
+                    # test if this is working correctly + need to handle repeated indices (requests)
+                    print(selection[dim], counters[dim], selection[dim].index(counters[dim]))
                     ix += int(selection[dim].index(counters[dim]) * np.prod(target_sz[dim+1:-2]))
             
             # only keep selected channels & columns
@@ -237,10 +263,10 @@ class twix_array():
                 # select columns
                 data = data[:,selection[-1]]
 
-            out[ix] += data
+            out[ix] += requests * data
 
             # increment average counter for ix
-            ave_counter[ix] += 1
+            ave_counter[ix] += ix
 
         # scale data according to ave_counter:
         ave_counter = np.maximum(ave_counter, 1)

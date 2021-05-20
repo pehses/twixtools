@@ -77,7 +77,7 @@ def map_twix(input):
 
         # convert each categories' mdb list to twix_array
         for category in out[-1].keys():
-            out[-1][category] = twix_array(out[-1][category])
+            out[-1][category] = twix_array(out[-1][category], meas['hdr'].copy())
 
         # include hdr in dict
         out[-1]['hdr'] = meas['hdr'].copy()
@@ -92,9 +92,12 @@ def map_twix(input):
 
 class twix_array():
 
-    def __init__(self, mdb_list):
+    def __init__(self, mdb_list, hdr=None):
         
         self.mdb_list = mdb_list.copy()
+        self.hdr = None
+        if hdr is not None:
+            self.hdr = hdr.copy()
         
         # delete 'ACQEND' and 'SYNCDATA' flags if present
         twixtools.del_from_mdb_list(self.mdb_list, lambda mdb: mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'))
@@ -123,7 +126,8 @@ class twix_array():
         for key, item in enumerate(shp): # complicated, can we do this converston better (proper casting?)
             self.base_shape[key]=item 
         # todo: coil-compression ('cc', 'ncc')
-        self._flags = {'average_dim': np.zeros(self.ndim, dtype=bool), 'remove_os': False, 'regrid': False, 'cc': False, 'ncc': -1}
+        self._flags = {'average_dim': np.zeros(self.ndim, dtype=bool), 'remove_os': False, 'regrid': False, 'zf_missing_lines': False} 
+        #, 'cc': False, 'ncc': -1}
 
     @property
     def dims(self):
@@ -147,6 +151,11 @@ class twix_array():
         shp = self.base_shape.copy()
         if self.flags['remove_os']:
             shp[-1] //= 2
+        if self.hdr is not None and self.flags['zf_missing_lines']:
+            hdr_lin = self.hdr['MeasYaps']['sKSpace']['lPhaseEncodingLines']
+            hdr_par = self.hdr['MeasYaps']['sKSpace']['lPartitions']
+            shp['Lin'] = max(shp['Lin'], hdr_lin)
+            shp['Par'] = max(shp['Par'], hdr_par)
         for dim in range(len(shp)):
             if self.flags['average_dim'][dim]:
                 shp[dim] = 1

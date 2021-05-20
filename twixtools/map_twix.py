@@ -27,7 +27,7 @@ twix_category['fidnav']          = {'noname60': True}  # this is the real reason
 
 
 def map_twix(input):
-    # creates a list of measurements
+    # creates a list of measurements (or a single dict if input was dict)
     # with data for each measurement mapped to a twix_array object
 
     if isinstance(input, list):
@@ -79,13 +79,17 @@ def map_twix(input):
         for category in out[-1].keys():
             out[-1][category] = twix_array(out[-1][category], meas['hdr'].copy())
 
+        # set few default flag(s) for 'image' category
+        if 'image' in out[-1]:
+            out[-1]['image'].flags['zf_missing_lines'] = True
+
         # include hdr in dict
         out[-1]['hdr'] = meas['hdr'].copy()
         out[-1]['hdr_str'] = meas['hdr_str'].copy()
 
-        # go back to dict if input was dict
-        if isinstance(input, dict):
-            out = out[0]
+    # go back to dict if input was dict
+    if isinstance(input, dict):
+        out = out[0]
 
     return out
 
@@ -127,7 +131,7 @@ class twix_array():
             self.base_shape[key]=item 
         # todo: coil-compression ('cc', 'ncc')
         self._flags = {'average_dim': np.zeros(self.ndim, dtype=bool), 'remove_os': False, 'regrid': False, 'zf_missing_lines': False} 
-        #, 'cc': False, 'ncc': -1}
+        #'skip_missing_lines': False, 'cc': False, 'ncc': -1}
 
     @property
     def dims(self):

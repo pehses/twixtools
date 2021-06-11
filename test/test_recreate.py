@@ -18,7 +18,7 @@ def md5(fname):
 class test_lossless(unittest.TestCase):
 
     def test(self):
-        infile = 'test/singlechannel.dat'
+        infile = 'example_data/singlechannel.dat'
         md5_orig = md5(infile)
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
@@ -33,7 +33,7 @@ class test_lossless(unittest.TestCase):
 class test_zfp(unittest.TestCase):
 
     def test(self):
-        infile = 'test/singlechannel.dat'
+        infile = 'example_data/singlechannel.dat'
         sz_orig = os.path.getsize(infile)
 
         zfp_tol = 1e-5
@@ -63,7 +63,7 @@ class test_zfp(unittest.TestCase):
 class test_remove_os(unittest.TestCase):
 
     def test(self):
-        infile = 'test/singlechannel.dat'
+        infile = 'example_data/singlechannel.dat'
         sz_orig = os.path.getsize(infile)
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
@@ -78,7 +78,7 @@ class test_remove_os(unittest.TestCase):
 class test_scc(unittest.TestCase):
 
     def test(self):
-        infile = 'test/multichannel.dat'
+        infile = 'example_data/multichannel.dat'
 
         with suppress_stdout_stderr():
             twix_orig = read_twix(infile)[-1]
@@ -107,7 +107,7 @@ class test_scc(unittest.TestCase):
 class test_gcc(unittest.TestCase):
 
     def test(self):
-        infile = 'test/multichannel.dat'
+        infile = 'example_data/multichannel.dat'
 
         with suppress_stdout_stderr():
             twix_orig = read_twix(infile)[-1]

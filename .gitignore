@@ -5,4 +5,4 @@ dist/
 .idea/
 .ipynb_checkpoints
 .vscode/
-test/*.dat
+#example_data/

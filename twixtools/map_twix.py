@@ -43,8 +43,9 @@ def map_twix(input):
 
     out = list()
     for meas in twix:
+
         if not isinstance(meas, dict):
-            pass  # first "meas" may store first 10240 bytes of file
+            continue  # first "meas" may store first 10240 bytes of file
         
         # append new dict to output list
         out.append(dict())
@@ -94,6 +95,7 @@ def map_twix(input):
     return out
 
 
+
 class twix_array():
 
     def __init__(self, mdb_list, hdr=None):
@@ -126,12 +128,12 @@ class twix_array():
             req_shape = np.concatenate([req_shape, [mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']]])
             shp = np.maximum(shp, req_shape)
 
-        self.base_shape = np.ones(1, dtype=self.dt_dims)[0]
+        self.base_size = np.ones(1, dtype=self.dt_dims)[0]
         for key, item in enumerate(shp): # complicated, can we do this converston better (proper casting?)
-            self.base_shape[key]=item 
+            self.base_size[key]=item 
         # todo: coil-compression ('cc', 'ncc')
-        self._flags = {'average_dim': np.zeros(self.ndim, dtype=bool), 'remove_os': False, 'regrid': False, 'zf_missing_lines': False} 
-        #'skip_missing_lines': False, 'cc': False, 'ncc': -1}
+        self._flags = {'average': {item:False for item in self.dims}, 'remove_os': False, 'regrid': False, 'zf_missing_lines': False} 
+        #'skip_missing_lines': False, 'cc': -1}
 
     @property
     def dims(self):
@@ -139,7 +141,7 @@ class twix_array():
 
     @property
     def non_singleton_dims(self):
-        return self.dims[self.shape>1]
+        return [dim for dim in self.dims if self.size[dim]>1]
 
     @property
     def ndim(self):
@@ -151,19 +153,28 @@ class twix_array():
         return self._flags
 
     @property
-    def shape(self):
-        shp = self.base_shape.copy()
+    def size(self):
+        # self.size returns the shape of the data as a dtype with named elements for easier access
+        sz = self.base_size.copy()
         if self.flags['remove_os']:
-            shp[-1] //= 2
+            sz[-1] //= 2
         if self.hdr is not None and self.flags['zf_missing_lines']:
             hdr_lin = self.hdr['MeasYaps']['sKSpace']['lPhaseEncodingLines']
-            hdr_par = self.hdr['MeasYaps']['sKSpace']['lPartitions']
-            shp['Lin'] = max(shp['Lin'], hdr_lin)
-            shp['Par'] = max(shp['Par'], hdr_par)
-        for dim in range(len(shp)):
-            if self.flags['average_dim'][dim]:
-                shp[dim] = 1
-        return shp
+            sz['Lin'] = max(sz['Lin'], hdr_lin)
+            if self.hdr['MeasYaps']['sKSpace']['ucDimension'] > 2:
+                hdr_par = self.hdr['MeasYaps']['sKSpace']['lPartitions']
+                sz['Par'] = max(sz['Par'], hdr_par)
+        for dim in range(len(sz)):
+            if self.flags['average'][self.dims[dim]]:
+                sz[dim] = 1
+        return sz
+
+
+    @property
+    def shape(self):
+        # self.shape is the more numpy compatible version of self.size by returning a tuple
+        return self.size.item()
+
 
     def __getitem__(self, index):
         # implement array slicing here
@@ -201,7 +212,7 @@ class twix_array():
                         raise IndexError("index %d is out of bounds for axis %d with size %d"%(i, key, self.shape[key]))
                 selection.append(item)
         
-        target_sz = list(self.shape.copy().tolist())
+        target_sz = list(self.shape)
         for key, item in enumerate(selection):
             if item != slice(None):
                 target_sz[key] = len(item)
@@ -228,7 +239,7 @@ class twix_array():
                 if key>=self.ndim-2:
                     # skip col & cha
                     continue
-                if self.flags['average_dim'][key]:
+                if self.flags['average'][key]:
                     # averaged dims are completely read
                     continue
                 if counters[key] not in sel:
@@ -243,11 +254,11 @@ class twix_array():
             data = mdb.data
 
             # average cha if requested
-            if self.flags['average_dim'][-2]:
+            if self.flags['average']['Cha']:
                 data = data.mean(-2, keepdims=True)
 
             # average col or apply oversampling removal if requested
-            if self.flags['average_dim'][-1]:
+            if self.flags['average']['Col']:
                 data = data.mean(-1, keepdims=True)
             else:
                 if self.flags['regrid']:
@@ -255,19 +266,23 @@ class twix_array():
                 if self.flags['remove_os']:  
                     data,_ = remove_oversampling(data)
 
+            # reflect data if mdh flag is set
+            if mdb.is_flag_set('REFLECT'):
+                data = data[...,::-1]
+
             ix = int(0)
             requests = 1
             for dim in range(self.ndim-2):
-                if self.flags['average_dim'][dim]:
+                if self.flags['average'][self.dims[dim]]:
                     pass  # nothing to add
                 elif dim >= len(selection) or selection[dim] == slice(None):
                     ix += int(counters[dim] * np.prod(target_sz[dim+1:-2]))
                 else:
                     # wip
                     # test if this is working correctly + need to handle repeated indices (requests)
-                    print(selection[dim], counters[dim], selection[dim].index(counters[dim]))
+                    # print(selection[dim], counters[dim], selection[dim].index(counters[dim]))
                     ix += int(selection[dim].index(counters[dim]) * np.prod(target_sz[dim+1:-2]))
-            
+
             # only keep selected channels & columns
             if len(selection) > self.ndim-2:
                 # select channels

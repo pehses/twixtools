@@ -185,6 +185,7 @@ class twix_array():
             raise IndexError("too many indices for array: array is %d-dimensional, but %d were indexed"%(self.ndim, len(index)))
         ellipsis_in_index = False
         selection = list()
+        remove_dim = list()
         for key, item in enumerate(index):
             if ellipsis_in_index:
                 key += self.ndim - len(index)
@@ -206,13 +207,16 @@ class twix_array():
                     selection.append(range(ix[0], ix[1], ix[2]))
             else:
                 if isinstance(item, int):
-                    item = [item] # create list
+                    item = [item]
+                    remove_dim.append(key)
                 for i in item:
                     if (i < -int(self.shape[key])) or (i>=self.shape[key]):
                         raise IndexError("index %d is out of bounds for axis %d with size %d"%(i, key, self.shape[key]))
                 selection.append(item)
         
         target_sz = list(self.shape)
+         
+         # to follow the python convention, single indices will reduce the output's dimensionality
         for key, item in enumerate(selection):
             if item != slice(None):
                 target_sz[key] = len(item)
@@ -239,7 +243,7 @@ class twix_array():
                 if key>=self.ndim-2:
                     # skip col & cha
                     continue
-                if self.flags['average'][key]:
+                if self.flags['average'][self.dims[key]]:
                     # averaged dims are completely read
                     continue
                 if counters[key] not in sel:
@@ -294,10 +298,13 @@ class twix_array():
             out[ix] += requests * data
 
             # increment average counter for ix
-            ave_counter[ix] += ix
+            ave_counter[ix] += 1
 
         # scale data according to ave_counter:
         ave_counter = np.maximum(ave_counter, 1)
         out /= ave_counter[..., np.newaxis, np.newaxis]
+
+        # to follow the numpy convention, single indices will reduce the output's dimensionality
+        target_sz = [target_sz[key] for key in range(len(target_sz)) if key not in remove_dim]
 
         return out.reshape(target_sz)

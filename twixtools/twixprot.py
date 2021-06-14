@@ -1,159 +1,5 @@
-def twixprot(f, hdr_len, version_is_ve):
-    """
-    Parses xprotocol of siemens twix-file object and returns a protocol dict.
-
-    Currently only (the first occurence of) the ascconv-protocol
-    data is read. Seems to be enough information for now.
-    """
-    # output dict:
-    ascconv = dict()
-
-    # find begin of ascconv data
-    search_str = '### ASCCONV BEGIN'
-    if version_is_ve:
-        search_str += ' object=MrProtDataImpl@MrProtocolData'
-
-    start_pos = f.tell()
-    while str(f.readline()).find(search_str) == -1:
-        if f.tell()-start_pos > hdr_len:
-            return ascconv
-
-    for line in f:
-        if f.tell()-start_pos > hdr_len:
-            break
-        line = line.decode('utf-8').rstrip()
-        if line.find('### ASCCONV END') > -1:
-            break
-
-        cConv = ascconv
-        parts = line.split()
-        splitparts = parts[0].split('.')
-        for i, var in enumerate(splitparts):
-            if var.startswith('a'):
-                tmp = var.strip(']').split('[')
-                key = tmp[0]
-                if len(tmp) > 1:
-                    index = int(tmp[1])
-                else:
-                    index = 0
-                if key not in cConv.keys():
-                    cConv.update({key: list()})
-                if i < len(splitparts) - 1:
-                    for k in range(len(cConv[key]) - 1, index):
-                        cConv[key].append(dict())
-                    cConv = cConv[key][index]
-                else:
-                    val = parts[-1]
-                    if key.startswith(('al', 'an', 'ac')):
-                        val = int(float(val))
-                    elif key.startswith(('ad', 'afl')):
-                        val = float(val)
-                    elif key.startswith(('auc', 'aui', 'aul', 'aun')):
-                        try:
-                            val = int(val)
-                        except:
-                            val = int(val, 16)
-                    else:
-                        val = val.strip('"')
-                    for k in range(len(cConv[key]) - 1, index - 1):
-                        cConv.get(key).append([])
-                    cConv.get(key).insert(index, val)
-            else:
-                if i < len(splitparts) - 1:
-                    if var not in cConv.keys():
-                        cConv.update({var: dict()})
-                    cConv = cConv[var]
-                else:
-                    key = splitparts[-1]
-                    val = parts[-1]
-                    if key.startswith(('l', 'n', 'c')):
-                        val = int(float(val))
-                    elif key.startswith(('d', 'fl')):
-                        val = float(val)
-                    elif key.startswith(('uc', 'ui', 'ul','un', 'e', 'size')):
-                        try:
-                            val = int(val)
-                        except:
-                            val = int(val, 16)
-                    else:
-                        val = val.strip('"')
-                    cConv.update({key: val})
-    return ascconv
-
-
-def parse_ascconv(string):
-    """
-    Parses xprotocol of siemens twix-file object and returns a protocol dict.
-    """
-
-    # output dict:
-    ascconv = dict()
-    for line in string.split('\n'):
-        if line.startswith('#') or not line:
-            continue
-        cConv = ascconv
-        parts = line.split()
-        splitparts = parts[0].split('.')
-        for i, var in enumerate(splitparts):
-            if var.startswith('a'):
-                tmp = var.strip(']').split('[')
-                key = tmp[0]
-                if len(tmp) > 1:
-                    index = int(tmp[1])
-                else:
-                    index = 0
-                if key not in cConv.keys():
-                    cConv.update({key: list()})
-                if i < len(splitparts) - 1:
-                    for k in range(len(cConv[key]) - 1, index):
-                        cConv[key].append(dict())
-                    cConv = cConv[key][index]
-                else:
-                    val = parts[-1]
-                    if key.startswith(('al', 'an', 'ac')):
-                        val = int(float(val))
-                    elif key.startswith(('ad', 'afl')):
-                        val = float(val)
-                    elif key.startswith(('auc', 'aui', 'aul', 'aun')):
-                        try:
-                            val = int(val)
-                        except:
-                            val = int(val, 16)
-                    else:
-                        val = val.strip('"')
-                    for k in range(len(cConv[key]) - 1, index - 1):
-                        cConv.get(key).append([])
-                    cConv.get(key).insert(index, val)
-            else:
-                if i < len(splitparts) - 1:
-                    if var not in cConv.keys():
-                        cConv.update({var: dict()})
-                    cConv = cConv[var]
-                else:
-                    key = splitparts[-1]
-                    val = parts[-1]
-                    if key.startswith(('l', 'n', 'c')):
-                        val = int(float(val))
-                    elif key.startswith(('d', 'fl')):
-                        val = float(val)
-                    elif key.startswith(('uc', 'ui', 'ul', 'un', 'e', 'size')):
-                        try:
-                            val = int(val)
-                        except:
-                            val = int(val, 16)
-                    else:
-                        val = val.strip('"')
-                    cConv.update({key: val})
-    return ascconv
-
-
-def parse_xprot(buf):
-    for line in buf.split('\n'):
-        if not line.rsplit():
-            continue
-            
-        
-    return buf
+import re
+from itertools import chain
 
 
 def parse_twix_hdr(file):
@@ -172,154 +18,133 @@ def parse_twix_hdr(file):
         pos += len(matches.group())
         file.seek(pos)
         buf = file.read(buf_len).decode('latin1')
-        if name == "MeasYaps":
-            xprotocol[name] = parse_ascconv(buf)
-        else:
-            xprotocol[name] = parse_xprot(buf)
+        xprotocol[name] = parse_buffer(buf)
         pos += buf_len
 
     return xprotocol
 
-    # header = fin.read(hdr_len)
-    # header = header[:-24].decode('latin-1')
-    # res = header.split("\n")
-    # res = header
-    # twixHeader = dict()
-    # for linNum, line in enumerate(res):
-    #     if line.lstrip().startswith("<ParamString"):
-    #         name, value = readParamString(res, linNum, line)
-    #         twixHeader[name] = value
-    #     if line.lstrip().startswith("<ParamLong"):
-    #         name, value = readParamLong(res, linNum, line)
-    #         twixHeader[name] = value
-    #     if line.lstrip().startswith("<ParamDouble"):
-    #         name, value = readParamDouble(res, linNum, line)
-    #         twixHeader[name] = value
-    #     if line.lstrip().startswith("<ParamArray"):
-    #         name, value = readParamArray(res, linNum, line)
-    #         twixHeader[name] = value
-    # 
-    #     return twixHeader
 
-
-def readParamDouble(res, linNum, line):
-    name = (re.search("<.*>", line).group())
-    name = name.split("\"")
-    name = name[-2]
-
-    value = (re.search("{.*}", line))
-    if value is not None:
+def try_cast(value, key):
+    if key.startswith('t'):
         try:
-            value = re.split('{ |} |\s', value.group())
-            value = float(value[-3])
-        except:
-            value = ""
-    else:
-        subLine = linNum+1
-        value = ""
-        tmp = res[subLine].lstrip()
-        while "}" not in tmp:
-            subLine = subLine + 1
-            tmp = res[subLine].lstrip()
-            if "<" not in tmp:
-                value = value + tmp
-        value = value[:-1]
-        value = value.split()
-        if len(value) == 0:
-            value = 0
-        elif len(value) == 1:
-            value = float(value[0])
-        else:
-            value = np.array(value, dtype=np.float)
-
-    return[name, value]
-
-
-def readParamLong(res, linNum, line):
-    name = (re.search("<.*>", line).group())
-    name = name.split("\"")
-    name = name[-2]
-
-    value = (re.search("{.*}", line))
-    if value is not None:
+            value = value.strip('"')
+        except ValueError:
+            pass
+    elif key.startswith('b'):
         try:
-            value = re.split('{ |}', value.group())
-            value = int(value[-2])
-        except:
-            value = ""
-    else:
-        subLine = linNum+1
-        value = ""
-        tmp = res[subLine].lstrip()
-        while "}" not in tmp:
-            subLine = subLine + 1
-            tmp = res[subLine].lstrip()
-            if "<" not in tmp:
-                value = value + tmp
-        value = value[:-1]
-        value = value.split()
-        if len(value) == 0:
-            value = 0
-        elif len(value) == 1:
-            value = int(value[0])
-        else:
-            value = np.array(value, dtype=np.int)
-
-    return[name, value]
-
-
-def readParamString(res, linNum, line):
-    name = (re.search("<.*>", line).group())
-    name = name.split("\"")
-    name = name[-2]
-
-    value = (re.search("{.*}", line))
-    if value is not None:
-        value = value.group().split("\"")
+            value = bool(value)
+        except ValueError:
+            pass
+    elif key.startswith('l') or  key.startswith('ul'):
         try:
-            value = value[-2]
-        except:
-            value = ""
+            value = int(value)
+        except ValueError:
+            pass
+    elif key.startswith('uc'):
+        try:
+            value = int(value, 16)
+        except ValueError:
+            pass
+    else:  # try to convert everything else to float
+        # obsolete: elif key.startswith('d') or key.startswith('fl'):
+        try:
+            value = float(value)
+        except ValueError:
+            pass
+    return value
+
+            
+def update_ascconv(prot, key, value, last_string=None):
+    if '__attribute__' in key:
+        return
+    if len(key)>1:
+        if isinstance(key[0], int): # int -> list
+            while len(prot) < key[0]+1:
+                if isinstance(key[1], int):    
+                    prot.append(list())
+                else:
+                    prot.append(dict())
+            update_ascconv(prot[key[0]], key[1:], value, last_string)
+        else: # string -> dict
+            last_string = key[0]
+            if key[0] not in prot:
+                if isinstance(key[1], int):
+                    prot[key[0]] = list()
+                else:
+                    prot[key[0]] = dict()
+            update_ascconv(prot[key[0]], key[1:], value, last_string)
     else:
-        subLine = linNum+1
-        value = ''
-        tmp = res[subLine].lstrip()
-        while "}" not in tmp:
-            subLine = subLine + 1
-            tmp = res[subLine].lstrip()
-            if "<" not in tmp:
-                value = value + tmp
-        value = value[:-1]
-        value = value.split()
-        if len(value) == 0:
-            value = ''
-        elif len(value) == 1:
-            value = value[0]
+        if isinstance(key[0], int):
+            while len(prot) < key[0]+1:
+                prot.append(list())
         else:
-            value = np.array(value)
+            last_string = key[0]
+        
+        # remove a (for array) from string
+        if last_string.startswith('a'):
+            last_string = last_string[1:]            
+            
+        prot[key[0]] = try_cast(value, last_string)
+            
+        
 
-    return [name, value]
+def parse_ascconv(buffer):
+    vararray = re.finditer(r'(?P<name>\S*)\s*=\s*(?P<value>\S*)\n', buffer)
+    mrprot = dict()
+    for v in vararray:
+        # now split array name and index (if present)
+        vvarray = re.finditer(r'(?P<name>\w+)(\[(?P<ix>[0-9]+)\])?', v.group('name'))
+        currKey = []
+        for vv in vvarray:
+            currKey.append(vv.group('name'))
+            if vv.group('ix') is not None:
+                currKey.append(int(vv.group('ix')))
+        
+        update_ascconv(mrprot, currKey, v.group('value'))
+        
+    return mrprot
 
 
-def readParamArray(res, linNum, line):
-    name = (re.search("<.*>", line).group())
-    name = name.split("\"")
-    name = name[-2]
-    start = res[linNum+1]
-    end = start.replace('{', '}')
+def parse_xprot(buffer):
+    xprot = {}
+    tokens = re.finditer(r'<Param(?:Bool|Long|String)\."(\w+)">\s*{([^}]*)', buffer)
+    tokensDouble = re.finditer(r'<ParamDouble\."(\w+)">\s*{\s*(<Precision>\s*[0-9]*)?\s*([^}]*)', buffer)
+    alltokens = chain(tokens, tokensDouble)
 
-    tmp = res[linNum+1]
-    subLine = linNum + 1
-    value = tmp.lstrip()
-    while tmp != end:
-        subLine = subLine + 1
-        tmp = res[subLine]
-        if tmp.lstrip() != '{ }':
-            if "<" not in tmp:
-                value = value + tmp.lstrip()
+    for t in alltokens:
+        name = t.group(1)
 
-    value = re.sub("{|}", '', value)
-    if value == '':
-        value = 0
+        value = re.sub(r'("*)|( *<\w*> *[^\n]*)', '', t.groups()[-1])
+        value = re.sub(r'[\t\n\r\f\v]*', '',
+                       value.strip())  # value = re.sub(r'\s*',' ',value) for some bonkers reason this inserts whitespace between all the letters! Just look for other whitespace that \s usually does.
+        
+        if name.startswith('a'):
+            out = list()
+            for v in value.split():
+                out.append(try_cast(v, name[1:]))
+            value = out
+        else:
+            value = try_cast(value, name)
+        
+        xprot.update({name: value})
 
-    return [name, value]
+    return xprot
+
+
+def parse_buffer(buffer):
+    reASCCONV = re.compile(r'### ASCCONV BEGIN[^\n]*\n(.*)\s### ASCCONV END ###', re.DOTALL)
+
+    ascconv = reASCCONV.search(buffer)
+    if ascconv is not None:
+        prot = parse_ascconv(ascconv.group(0))
+    else:
+        prot = dict()
+
+    xprot = reASCCONV.split(buffer)
+    if xprot is not None:
+        xprot = ''.join([found for found in xprot])
+        prot2 = parse_xprot(xprot)
+
+        prot.update(prot2)
+
+    return prot

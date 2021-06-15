@@ -2,9 +2,8 @@ import copy
 from twixtools.mdh_def import is_flag_set
 import numpy as np
 from numpy.core.fromnumeric import shape
-from scipy.integrate import cumtrapz
 import twixtools
-from twixtools.recon_helpers import remove_oversampling
+from twixtools.recon_helpers import remove_oversampling, calc_regrid_traj, perform_regrid
 
 
 # define categories in which the twix data should be sorted based on MDH flags that must or must not be set (True/False)
@@ -123,6 +122,8 @@ class twix_array():
         
         # determine k-space shape by finding max index
         shp = np.ones(len(self.dt_dims), dtype=self.dt_dims[1])
+        self._first_ix = 1024 * np.ones(len(self.dt_dims)-2, dtype=self.dt_dims[1])
+
         for mdb in self.mdb_list:
 
             sLC = mdb.mdh['sLC']
@@ -131,13 +132,13 @@ class twix_array():
             # add channels & columns
             req_shape = np.concatenate([req_shape, [mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']]])
             shp = np.maximum(shp, req_shape)
+            self._first_ix = np.minimum(self._first_ix, sLC)
 
         self.base_size = np.ones(1, dtype=self.dt_dims)[0]
         for key, item in enumerate(shp): # complicated, can we do this converston better (proper casting?)
             self.base_size[key]=item 
         # todo: coil-compression ('cc', 'ncc')
-        #       'skip_missing_lines': False, 'cc': -1}
-        self._flags = {'average': {item:False for item in self.dims}, 'remove_os': False, 'regrid': False, 'zf_missing_lines': False}
+        self._flags = {'average': {item:False for item in self.dims}, 'remove_os': False, 'regrid': False, 'skip_empty_lead': False, 'zf_missing_lines': False}
         
         # averages should be averaged by default:
         self._flags['average']['Ave'] = True
@@ -146,9 +147,9 @@ class twix_array():
         if flags is not None:
             for key,item in flags.items():
                 try:
-                    self._flags[key] = item.copy()
+                    self.flags[key] = item.copy()
                 except:
-                    self._flags[key] = item
+                    self.flags[key] = item
 
 
     def copy(self):
@@ -181,12 +182,18 @@ class twix_array():
         sz = self.base_size.copy()
         if self.flags['remove_os']:
             sz[-1] //= 2
+
         if self.hdr is not None and self.flags['zf_missing_lines']:
             hdr_lin = self.hdr['MeasYaps']['sKSpace']['lPhaseEncodingLines']
             sz['Lin'] = max(sz['Lin'], hdr_lin)
             if self.hdr['MeasYaps']['sKSpace']['ucDimension'] > 2:
                 hdr_par = self.hdr['MeasYaps']['sKSpace']['lPartitions']
                 sz['Par'] = max(sz['Par'], hdr_par)
+            
+        if self.flags['skip_empty_lead']:
+            sz['Lin'] -= self._first_ix[self.dim_order.index('Lin')]
+            sz['Par'] -= self._first_ix[self.dim_order.index('Par')]
+
         for dim in range(len(sz)):
             if self.flags['average'][self.dims[dim]]:
                 sz[dim] = 1
@@ -257,6 +264,11 @@ class twix_array():
 
             counters = mdb.mdh['sLC'][self.sorted_mdh_keys].astype(self.dt_counters)
             
+            if self.flags['skip_empty_lead']:
+                lpos, ppos = self.dim_order.index('Lin'), self.dim_order.index('Par')
+                counters[lpos] -= self._first_ix[lpos]
+                counters[ppos] -= self._first_ix[ppos   ]
+
             # check if we have to read this mdb
             do_not_read = False
             for key, sel in enumerate(selection):
@@ -289,19 +301,7 @@ class twix_array():
                 data = data.mean(-1, keepdims=True)
             else:
                 if self.flags['regrid'] and self.rs_traj is not None and not mdb.is_flag_set('SKIP_REGRIDDING'):
-                    # first correct for readout shifts
-                    # the nco frequency is always scaled to the max.
-                    # gradient amp and does account for ramp-sampling
-                    ncol = mdb.mdh["ushSamplesInScan"]
-                    ro_shift = mdb.mdh["fReadOutOffcentre"]
-                    deltak = max(abs(np.diff(self.rs_traj)))
-                    adcphase = deltak * ro_shift * np.arange(ncol)
-                    fovphase = ro_shift * self.rs_traj
-                    data *= np.exp(1j*2*np.pi*(adcphase - fovphase))                    
-                    
-                    # interpolate
-                    x = np.linspace(self.rs_traj[0], self.rs_traj[-1], ncol)
-                    data = np.asarray([np.interp(x, self.rs_traj, y) for y in data])
+                    data = perform_regrid(data, self.rs_traj, mdb.mdh["fReadOutOffcentre"])
 
                 if self.flags['remove_os']:
                     data,_ = remove_oversampling(data)
@@ -342,46 +342,3 @@ class twix_array():
 
         return out.reshape(target_sz)
 
-
-
-def calc_regrid_traj(prot):
-
-    meas = prot['Meas']
-
-    if 'alRegridMode' not in meas or meas['alRegridMode'][0] < 2:
-        return None
-
-    regrid_mode = meas['alRegridMode'][0]
-    ncol = meas['alRegridDestSamples'][0]
-    dwelltime = meas['aflRegridADCDuration'][0] / ncol
-    start = meas['alRegridDelaySamplesTime'][0]
-    rampup_time = meas['alRegridRampupTime'][0]
-    flattop_time = meas['alRegridFlattopTime'][0]
-    rampdown_time = meas['alRegridRampdownTime'][0]
-    gr_adc = np.zeros(ncol, dtype=np.single)
-    time_adc = start + dwelltime * np.arange(0.5, ncol + 0.5)
-    ixUp = np.where(time_adc < rampup_time)[0]
-    ixFlat = np.setdiff1d(np.where(time_adc <= rampup_time + flattop_time)[0],
-                            np.where(time_adc < rampup_time)[0])
-    ixDn = np.setdiff1d(np.setdiff1d(np.arange(ncol), ixFlat), ixUp)
-    gr_adc[ixFlat] = 1
-    if regrid_mode == 2:
-        # trapezoidal gradient
-        gr_adc[ixUp] = time_adc[ixUp] / rampup_time
-        gr_adc[ixDn] = 1 - (time_adc[ixDn] - rampup_time - flattop_time) / rampdown_time
-    elif regrid_mode == 4:
-        gr_adc[ixUp] = np.sin(np.pi / 2 * time_adc[ixUp] / rampup_time)
-        gr_adc[ixDn] = np.sin(np.pi / 2 * (1 + (time_adc[ixDn] - rampup_time - flattop_time) / rampdown_time))
-    else:
-        raise Exception('regridding mode unknown')
-
-    # make sure that gr_adc is always positive (rs_traj needs to be strictly monotonic)
-    gr_adc = np.maximum(gr_adc, 1e-4)
-    rs_traj = (np.append(0, cumtrapz(gr_adc)) - ncol // 2) / np.sum(gr_adc)
-    rs_traj -= np.mean(rs_traj[ncol//2-1 : ncol//2+1])
- 
-    # scale rs_traj by kmax (only works if all slices have same FoV!!!)
-    kmax = prot['MeasYaps']['sKSpace']['lBaseResolution'] / prot['MeasYaps']['sSliceArray']['asSlice'][0]['dReadoutFOV']
-    rs_traj *= kmax
-
-    return rs_traj

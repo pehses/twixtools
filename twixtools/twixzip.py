@@ -219,7 +219,7 @@ def scc_calibrate_mtx(data):
     nc = data.shape[1]
     data = np.moveaxis(data,1,0)
     data = data.flatten().reshape((nc, -1))
-    U, s, V = np.linalg.svd(data, full_matrices=False)
+    U, s, _ = np.linalg.svd(data, full_matrices=False)
     mtx = np.conj(U.T)
     return mtx[np.newaxis, :, :], s
 
@@ -231,7 +231,7 @@ def gcc_calibrate_mtx(data):
     mtx = np.zeros((nx, nc, nc),dtype = 'complex64')
     s = np.zeros((nx, nc), dtype='float32')
     for x in range(nx):
-        U, s[x], V = np.linalg.svd(im[:,:,x], full_matrices=False)
+        U, s[x], _ = np.linalg.svd(im[:,:,x], full_matrices=False)
         mtx[x,] = np.conj(U.T)
     return mtx, s.mean(axis=0)
 
@@ -254,7 +254,7 @@ def calibrate_mtx(data, cc_mode, ncc, cc_tol):
         for k in range(nx-1):
             # additional alignment step (Paper Zhang, MRM, 2012) 
             Cx = np.matmul(mtx[k+1,], np.conj(mtx[k,].T))
-            Uc, sc, vhc = np.linalg.svd(Cx)
+            Uc, _, vhc = np.linalg.svd(Cx)
             Px = np.matmul(np.conj(vhc.T), np.conj(Uc.T))
             mtx[k+1,] = np.matmul(Px, mtx[k+1,])
 

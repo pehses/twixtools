@@ -6,11 +6,11 @@ def parse_twix_hdr(file):
     import re
     import struct
     import numpy as np
-    hdr_len, n_buffer = np.fromfile(file, dtype=np.uint32, count=2)
+    _, n_buffer = np.fromfile(file, dtype=np.uint32, count=2)
     xprotocol = dict()
-    pattern = b'(\w{4,})\x00(.{4})'
+    pattern = br'(\w{4,})\x00(.{4})'
     pos = file.tell()
-    for b in range(n_buffer):
+    for _ in range(n_buffer):
         tmp = file.read(48)
         matches = re.search(pattern, tmp, re.DOTALL)
         name = matches.group(1).decode('latin1')
@@ -35,7 +35,7 @@ def try_cast(value, key):
             value = bool(value)
         except ValueError:
             pass
-    elif key.startswith('l') or  key.startswith('ul'):
+    elif key.startswith('l') or key.startswith('ul'):
         try:
             value = int(value)
         except ValueError:
@@ -53,19 +53,19 @@ def try_cast(value, key):
             pass
     return value
 
-            
+
 def update_ascconv(prot, key, value, last_string=None):
     if '__attribute__' in key:
         return
-    if len(key)>1:
-        if isinstance(key[0], int): # int -> list
+    if len(key) > 1:
+        if isinstance(key[0], int):  # int -> list
             while len(prot) < key[0]+1:
-                if isinstance(key[1], int):    
+                if isinstance(key[1], int):
                     prot.append(list())
                 else:
                     prot.append(dict())
             update_ascconv(prot[key[0]], key[1:], value, last_string)
-        else: # string -> dict
+        else:  # string -> dict
             last_string = key[0]
             if key[0] not in prot:
                 if isinstance(key[1], int):
@@ -79,36 +79,39 @@ def update_ascconv(prot, key, value, last_string=None):
                 prot.append(list())
         else:
             last_string = key[0]
-        
+
         # remove a (for array) from string
         if last_string.startswith('a'):
-            last_string = last_string[1:]            
-            
+            last_string = last_string[1:]
+
         prot[key[0]] = try_cast(value, last_string)
-            
-        
+
 
 def parse_ascconv(buffer):
     vararray = re.finditer(r'(?P<name>\S*)\s*=\s*(?P<value>\S*)\n', buffer)
     mrprot = dict()
     for v in vararray:
         # now split array name and index (if present)
-        vvarray = re.finditer(r'(?P<name>\w+)(\[(?P<ix>[0-9]+)\])?', v.group('name'))
+        vvarray = re.finditer(r'(?P<name>\w+)(\[(?P<ix>[0-9]+)\])?',
+                              v.group('name'))
         currKey = []
         for vv in vvarray:
             currKey.append(vv.group('name'))
             if vv.group('ix') is not None:
                 currKey.append(int(vv.group('ix')))
-        
+
         update_ascconv(mrprot, currKey, v.group('value'))
-        
+
     return mrprot
 
 
 def parse_xprot(buffer):
     xprot = {}
-    tokens = re.finditer(r'<Param(?:Bool|Long|String)\."(\w+)">\s*{([^}]*)', buffer)
-    tokensDouble = re.finditer(r'<ParamDouble\."(\w+)">\s*{\s*(<Precision>\s*[0-9]*)?\s*([^}]*)', buffer)
+    tokens = re.finditer(
+        r'<Param(?:Bool|Long|String)\."(\w+)">\s*{([^}]*)', buffer)
+    tokensDouble = re.finditer(
+        r'<ParamDouble\."(\w+)">\s*{\s*(<Precision>\s*[0-9]*)?\s*([^}]*)',
+        buffer)
     alltokens = chain(tokens, tokensDouble)
 
     for t in alltokens:
@@ -116,8 +119,8 @@ def parse_xprot(buffer):
 
         value = re.sub(r'("*)|( *<\w*> *[^\n]*)', '', t.groups()[-1])
         value = re.sub(r'[\t\n\r\f\v]*', '',
-                       value.strip())  # value = re.sub(r'\s*',' ',value) for some bonkers reason this inserts whitespace between all the letters! Just look for other whitespace that \s usually does.
-        
+                       value.strip())
+
         if name.startswith('a'):
             out = list()
             for v in value.split():
@@ -125,14 +128,15 @@ def parse_xprot(buffer):
             value = out
         else:
             value = try_cast(value, name)
-        
+
         xprot.update({name: value})
 
     return xprot
 
 
 def parse_buffer(buffer):
-    reASCCONV = re.compile(r'### ASCCONV BEGIN[^\n]*\n(.*)\s### ASCCONV END ###', re.DOTALL)
+    reASCCONV = re.compile(
+        r'### ASCCONV BEGIN[^\n]*\n(.*)\s### ASCCONV END ###', re.DOTALL)
 
     ascconv = reASCCONV.search(buffer)
     if ascconv is not None:

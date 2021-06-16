@@ -1,10 +1,8 @@
 import os
-import numpy as np
 import tempfile
 import unittest
-from twixtools import twixzip, read_twix
-from twixtools.mdh_def import is_flag_set
-from twixtools.twixzip import suppress_stdout_stderr
+from twixtools import twixzip
+
 
 def md5(fname):
     import hashlib
@@ -17,19 +15,22 @@ def md5(fname):
 
 infile = 'example_data/gre.dat'
 
+
 class test_lossless(unittest.TestCase):
 
     def test(self):
-        
+
         md5_orig = md5(infile)
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
                 twixzip.compress_twix(infile=infile, outfile=out_h5.name)
-                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
+                twixzip.reconstruct_twix(infile=out_h5.name,
+                                         outfile=out_dat.name)
             md5_new = md5(out_dat.name)
 
-        self.assertEqual(md5_orig, md5_new, 'lossless compression: md5 hash does not match with original')
+        self.assertEqual(md5_orig, md5_new,
+                         'lossless compression: md5 hashes do not match')
 
 
 class test_remove_os(unittest.TestCase):
@@ -39,12 +40,14 @@ class test_remove_os(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
-                twixzip.compress_twix(infile=infile, outfile=out_h5.name, remove_os=True)
-                twixzip.reconstruct_twix(infile=out_h5.name, outfile=out_dat.name)
+                twixzip.compress_twix(infile=infile, outfile=out_h5.name,
+                                      remove_os=True)
+                twixzip.reconstruct_twix(infile=out_h5.name,
+                                         outfile=out_dat.name)
             sz_new = os.path.getsize(out_dat.name)
 
-        self.assertEqual(sz_orig, sz_new, 'remove_os: file size not equal to original')
-
+        self.assertEqual(sz_orig, sz_new,
+                         'remove_os: file size not equal to original')
 
 
 if __name__ == '__main__':

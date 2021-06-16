@@ -10,7 +10,8 @@ import twixtools.mdb
 import twixtools.hdr_def as hdr_def
 
 
-def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_scans=None):
+def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
+              include_scans=None):
     """Function for reading siemens twix raw data files."""
     if isinstance(infile, str):
         # assume that complete path is given
@@ -20,7 +21,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
         # filename not a string, so assume that it is the MeasID
         measID = infile
         infile = [f for f in os.listdir('.') if re.search(
-            r'^meas_MID0*' + str(measID) + '.*\.dat$', f)]
+            r'^meas_MID0*' + str(measID) + r'.*\.dat$', f)]
         if len(infile) == 0:
             print('error: .dat file with measID', measID, 'not found')
             raise ValueError
@@ -41,7 +42,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
     if version_is_ve:
         print('Software version: VD/VE (!?)')
         fid.seek(0, os.SEEK_SET)  # move pos to 9th byte in file
-        raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader, count=1)[0]
+        raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader,
+                                   count=1)[0]
         out.append(raidfile_hdr)
         NScans = raidfile_hdr["hdr"]["count_"]
         measOffset = list()
@@ -62,7 +64,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
         if include_scans is not None and s not in include_scans:
             # skip scan if it is not requested
             continue
-            
+
         scanStart = measOffset[s]
         scanEnd = scanStart + measLength[s]
         pos = measOffset[s]
@@ -86,7 +88,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
         print('Scan ', s)
         helpers.update_progress(pos - scanStart, scanEnd - scanStart, True)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
-            helpers.update_progress(pos - scanStart, scanEnd - scanStart, False)
+            helpers.update_progress(
+                pos - scanStart, scanEnd - scanStart, False)
             fid.seek(pos, os.SEEK_SET)
             mdb = twixtools.mdb.Mdb(fid, version_is_ve)
 
@@ -112,9 +115,9 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
 
 
 def write_twix(scanlist, outfile, version_is_ve=True):
-    
+
     def write_sync_bytes(fid):
-        syncbytes = (512-(fid.tell())%512)%512
+        syncbytes = (512-(fid.tell()) % 512) % 512
         fid.write(b'\x00' * syncbytes)
 
     if isinstance(scanlist, dict):
@@ -124,11 +127,11 @@ def write_twix(scanlist, outfile, version_is_ve=True):
         if version_is_ve:
             # allocate space for multi-header
             fid.write(b'\x00' * 10240)
-        
+
         scan_pos = list()
         scan_len = list()
-        for key, scan in enumerate(scanlist):
-            
+        for scan in scanlist:
+
             if not isinstance(scan, dict):
                 continue
 
@@ -147,15 +150,16 @@ def write_twix(scanlist, outfile, version_is_ve=True):
                 mdb.mdh.tofile(fid)
                 data = np.atleast_2d(mdb.data)
                 if version_is_ve:
-                    if mdb.is_flag_set('SYNCDATA') or mdb.is_flag_set('ACQEND'):
+                    if mdb.is_flag_set('SYNCDATA')\
+                            or mdb.is_flag_set('ACQEND'):
                         data.tofile(fid)
                     else:
                         for c in range(data.shape[0]):
-                            #write channel header
+                            # write channel header
                             mdb.channel_hdr[c].tofile(fid)
                             # write data
                             data[c].tofile(fid)
-                else: # WIP: VB version
+                else:  # WIP: VB version
                     mdb.mdh.tofile(fid)
                     # write data
                     data[c].tofile(fid)
@@ -174,7 +178,8 @@ def write_twix(scanlist, outfile, version_is_ve=True):
                 multi_header = scanlist[0].copy()
             else:
                 # start from scratch
-                multi_header = np.zeros(1, dtype=hdr_def.MultiRaidFileHeader)[0]
+                multi_header = np.zeros(
+                    1, dtype=hdr_def.MultiRaidFileHeader)[0]
                 for _ in range(n_scans):
                     multi_header['entry']['patName_'] = b'x'*45
                     multi_header['entry']['protName_'] = b'noname'
@@ -185,7 +190,7 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             for i, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
                 multi_header['entry'][i]['len_'] = len_
                 multi_header['entry'][i]['off_'] = pos_
-                
+
             # write MultiRaidFileHeader
             fid.seek(0)
             multi_header.tofile(fid)
@@ -207,8 +212,8 @@ def del_from_mdb_list(mdb_list, function):
     # helper function to safely remove multiple items from mdb_list at once
 
     ind2remove = [key for key, mdb in enumerate(mdb_list) if function(mdb)]
-            
-    for key in sorted(ind2remove, reverse=True): 
+
+    for key in sorted(ind2remove, reverse=True):
         del mdb_list[key]
-    
+
     return

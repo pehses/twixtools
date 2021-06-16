@@ -4,7 +4,7 @@
 
 ### Purpose
 
-twixtools provide reading and writing capability of Siemens MRI raw data files (.dat). In addition, it also includes the compression utility twixzip (see further below for a description).
+twixtools provide reading and limited writing capability of Siemens MRI raw data files (.dat). In addition, it also includes the compression utility twixzip (see further below for a description).
 
 
 ### Requirements

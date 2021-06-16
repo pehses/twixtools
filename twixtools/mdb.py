@@ -1,14 +1,13 @@
 import numpy as np
-import ctypes
 import os
 
 import twixtools.mdh_def as mdh_def
 
 
-def unpack_bits(infomask):
+def unpack_bits(mask):
     # numpy's unpackbits does not work correctly for some reason
-    infomask = infomask.view(np.uint64)[0]
-    return np.bitwise_and(infomask, 2**np.arange(8*infomask.nbytes)).astype(bool)
+    mask = mask.view(np.uint64)[0]
+    return np.bitwise_and(mask, 2**np.arange(8*mask.nbytes)).astype(bool)
 
 
 class Mdb_base(object):
@@ -29,7 +28,7 @@ class Mdb_base(object):
             return np.uint32(self.data_len + mdh_def.channel_hdr_type.itemsize)
         else:
             return np.uint32(self.data_len + mdh_def.vb17_hdr_type.itemsize)
-    
+
     def _get_dma_len(self):
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
             dma_len = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
@@ -63,11 +62,11 @@ class Mdb_base(object):
 
     def get_flags(self):
         return mdh_def.get_flags(self.mdh)
-    
+
     def get_active_flags(self):
         return mdh_def.get_active_flags(self.mdh)
 
-    def set_flags(self, flags): 
+    def set_flags(self, flags):
         mdh_def.set_flags(self.mdh, flags)
 
     def clear_all_flags(self):
@@ -79,7 +78,7 @@ class Mdb_base(object):
     @property
     def cLin(self):
         return self.mdh['sLC']['ushLine']
-    
+
     @property
     def cAcq(self):
         return self.mdh['sLC']['ushAcquisition']
@@ -113,10 +112,10 @@ class Mdb_base(object):
         return self.mdh['sLC']['ushSeg']
 
     def update_CRC(self):
-        if version_is_ve:
+        if self.version_is_ve:
             # CRC is currently not used by Siemens
             self.mdh["ulCRC"] = 0
-            self.channel_header["ulCRC"] = 0
+            self.channel_hdr["ulCRC"] = 0
 
     def set_timestamps(self, value=None):
         self.set_timestamp(value)
@@ -129,7 +128,7 @@ class Mdb_base(object):
         self.mdh["ulTimeStamp"] = value
         if self.version_is_ve:
             for hdr in self.channel_hdr:
-                self.channel_hdr["ulSequenceTime"] = value
+                hdr["ulSequenceTime"] = value
 
     def set_pmutimestamp(self, value=None):
         if value is None:
@@ -155,7 +154,7 @@ class Mdb_local(Mdb_base):
         if value.ndim > 2:
             raise ValueError
         self.__data = np.complex64(np.atleast_2d(value))
-        ncha, ncol = self.__data.shape
+        # ncha, ncol = self.__data.shape[-2:]
         # self._update_hdr(ncha, ncol)
 
     data = property(_get_data, _set_data)
@@ -167,12 +166,12 @@ class Mdb_local(Mdb_base):
         self.mdh["ushUsedChannels"] = ncha
         if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
             pass
-            ##self.mdh["ulFlagsAndDMALength"] # set packbit to zero and dma len to expected len (self.dma_len)
         if self.version_is_ve:
-            if self.channel_hdr is None or len(self.channel_hdr)<ncha:
-                self.channel_hdr = [np.zeros(1, dtype=mdh_def.channel_hdr_type)]
+            if self.channel_hdr is None or len(self.channel_hdr) < ncha:
+                self.channel_hdr = [np.zeros(1,
+                                             dtype=mdh_def.channel_hdr_type)]
             for c in range(ncha):
-                if c>=len(self.channel_hdr):
+                if c >= len(self.channel_hdr):
                     self.channel_hdr.append(self.channel_hdr[0])
                 self.channel_hdr[c]["ulChannelId"] = c
             del(self.channel_hdr[ncha:])
@@ -197,14 +196,18 @@ class Mdb(Mdb_base):
             return ValueError
         self.mem_pos = self.fid.tell()
         if self.version_is_ve:
-            self.mdh = np.fromfile(self.fid, dtype=mdh_def.scan_hdr_type, count=1)[0]
-            if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
-                for c in range(self.mdh['ushUsedChannels']):
-                    chan_hd = np.fromfile(self.fid, dtype=mdh_def.channel_hdr_type, count=1)[0]
+            self.mdh = np.fromfile(
+                self.fid, dtype=mdh_def.scan_hdr_type, count=1)[0]
+            if not self.is_flag_set('ACQEND')\
+                    and not self.is_flag_set('SYNCDATA'):
+                for _ in range(self.mdh['ushUsedChannels']):
+                    chan_hd = np.fromfile(
+                        self.fid, dtype=mdh_def.channel_hdr_type, count=1)[0]
                     self.channel_hdr.append(chan_hd)
                     self.fid.seek(self.data_len, os.SEEK_CUR)
         else:
-            self.mdh = np.fromfile(self.fid, dtype=mdh_def.vb17_hdr_type, count=1)[0]
+            self.mdh = np.fromfile(
+                self.fid, dtype=mdh_def.vb17_hdr_type, count=1)[0]
 
     def __get_data(self):
         was_closed = self.fid.closed
@@ -217,7 +220,7 @@ class Mdb(Mdb_base):
             skip_bytes = mdh_def.channel_hdr_type.itemsize
         else:
             skip_bytes = mdh_def.vb17_hdr_type.itemsize
-        
+
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
             # channel header is in this case assumed to be part of 'data'
             dma_len_ = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
@@ -226,8 +229,11 @@ class Mdb(Mdb_base):
             dma_len_ -= mdh_def.scan_hdr_type.itemsize
             out = np.fromfile(self.fid, dtype='<S1', count=dma_len_)
         else:
-            dt = np.dtype([('skip', bytes, skip_bytes), ('data', np.complex64, self.mdh['ushSamplesInScan'])])
-            out = np.fromfile(self.fid, dtype=dt, count=self.mdh['ushUsedChannels'])['data']
+            dt = np.dtype(
+                [('skip', bytes, skip_bytes),
+                 ('data', np.complex64, self.mdh['ushSamplesInScan'])])
+            out = np.fromfile(
+                self.fid, dtype=dt, count=self.mdh['ushUsedChannels'])['data']
 
         if was_closed:
             self.fid.close()

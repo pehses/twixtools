@@ -1,30 +1,48 @@
 import copy
-from twixtools.mdh_def import is_flag_set
 import numpy as np
-from numpy.core.fromnumeric import shape
 import twixtools
-from twixtools.recon_helpers import remove_oversampling, calc_regrid_traj, perform_regrid
+from twixtools.recon_helpers import (
+    remove_oversampling, calc_regrid_traj, perform_regrid
+)
 
 
-# define categories in which the twix data should be sorted based on MDH flags that must or must not be set (True/False)
-# only one 'any' per category allowed (however, it is possible to add other appropriate functions (even synonyms for any))
-twix_category = dict()
-twix_category['image']           = {'RTFEEDBACK': False, 'HPFEEDBACK': False, 'REFPHASESTABSCAN': False, 'PHASESTABSCAN': False,
-                                    'PHASCOR': False, 'NOISEADJSCAN': False, 'noname60': False}
-twix_category['noise']           = {'NOISEADJSCAN': True}
-twix_category['phasecorr']       = {'PHASCOR': True, 'PATREFSCAN': False, 'noname60': False}
-twix_category['phasestab']       = {'PHASESTABSCAN': True, 'REFPHASESTABSCAN': False, any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}, 'noname60': False} 
-twix_category['phasestab_ref0']  = {'REFPHASESTABSCAN': True, 'PHASESTABSCAN': False, any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}, 'noname60': False} 
-twix_category['phasestab_ref1']  = {'REFPHASESTABSCAN': True, 'PHASESTABSCAN': True, any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}, 'noname60': False} 
-twix_category['refscan']         = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'PHASCOR': False, 'PHASESTABSCAN': False, 
-                                   'REFPHASESTABSCAN': False, 'RTFEEDBACK': False, 'HPFEEDBACK': False, 'noname60': False}
-twix_category['refscan_pc']      = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'PHASCOR': True}
-twix_category['refscan_ps']      = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'REFPHASESTABSCAN': False, 'PHASESTABSCAN': True}
-twix_category['refscan_ps_ref0'] = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'REFPHASESTABSCAN': True, 'PHASESTABSCAN': False}
-twix_category['refscan_ps_ref1'] = {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True}, 'REFPHASESTABSCAN': True, 'PHASESTABSCAN': True}
-twix_category['rt_feedback']     = {any: {'RTFEEDBACK': True, 'HPFEEDBACK': True}, 'MDH_VOP': False}
-twix_category['vop']             = {'MDH_VOP': True}
-twix_category['fidnav']          = {'noname60': True}  # this is the real reason for including the 'noname60' check above
+# define categories in which the twix data should be sorted based on MDH flags
+# that must or must not be set (True/False)
+# only one 'any' per category allowed (however, it is possible to add other
+# appropriate functions (even synonyms for any))
+twix_category = {
+    'image':         {'RTFEEDBACK': False, 'HPFEEDBACK': False,
+                      'REFPHASESTABSCAN': False, 'PHASESTABSCAN': False,
+                      'PHASCOR': False, 'NOISEADJSCAN': False,
+                      'noname60': False},
+    'noise':         {'NOISEADJSCAN': True},
+    'phasecorr':     {'PHASCOR': True, 'PATREFSCAN': False, 'noname60': False},
+    'phasestab':     {'PHASESTABSCAN': True, 'REFPHASESTABSCAN': False,
+                      'noname60': False,
+                      any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}},
+    'refphasestab0': {'REFPHASESTABSCAN': True, 'PHASESTABSCAN': False,
+                      'noname60': False,
+                      any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}},
+    'refphasestab1': {'REFPHASESTABSCAN': True, 'PHASESTABSCAN': True,
+                      'noname60': False,
+                      any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True}},
+    'refscan':       {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True},
+                      'PHASCOR': False, 'PHASESTABSCAN': False,
+                      'REFPHASESTABSCAN': False, 'RTFEEDBACK': False,
+                      'HPFEEDBACK': False, 'noname60': False},
+    'ref_pc':        {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True},
+                      'PHASCOR': True},
+    'ref_ps':        {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True},
+                      'REFPHASESTABSCAN': False, 'PHASESTABSCAN': True},
+    'ref_ps_ref0':   {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True},
+                      'REFPHASESTABSCAN': True, 'PHASESTABSCAN': False},
+    'ref_ps_ref1':   {any: {'PATREFSCAN': True, 'PATREFANDIMASCAN': True},
+                      'REFPHASESTABSCAN': True, 'PHASESTABSCAN': True},
+    'rt_feedback':   {any: {'RTFEEDBACK': True, 'HPFEEDBACK': True},
+                      'MDH_VOP': False},
+    'vop':           {'MDH_VOP': True},
+    'fidnav':        {'noname60': True}  # why we include the 'noname60' checks
+}
 
 
 def map_twix(input):
@@ -47,28 +65,29 @@ def map_twix(input):
 
         if not isinstance(meas, dict):
             continue  # first "meas" may store first 10240 bytes of file
-        
+
         # append new dict to output list
         out.append(dict())
-        
+
         # sort mdbs into categories
         for mdb in meas['mdb']:
-            if mdb.is_flag_set('SYNCDATA'): # ignore syncdata
+            if mdb.is_flag_set('SYNCDATA'):  # ignore syncdata
                 continue
             if mdb.is_flag_set('ACQEND'):
                 break
 
-            for category, requirements in twix_category.items():
+            for category, rqmts in twix_category.items():
                 include_in_cat = True
-                for flag in requirements.keys():
-                    if isinstance(flag, str):   # simple check whether flag is set
-                        if mdb.is_flag_set(flag) != requirements[flag]:
+                for flag in rqmts.keys():
+                    if isinstance(flag, str):  # check whether flag is set
+                        if mdb.is_flag_set(flag) != rqmts[flag]:
                             include_in_cat = False
                             break
-                    else:  # assume that this is a function call (probably any())
+                    else:  # assume a function call (probably any())
                         checks = list()
-                        for flag2 in requirements[flag].keys():
-                            checks.append(mdb.is_flag_set(flag2)==requirements[flag][flag2])
+                        for flag2 in rqmts[flag].keys():
+                            checks.append(
+                                mdb.is_flag_set(flag2) == rqmts[flag][flag2])
                         if not flag(checks):
                             include_in_cat = False
                             break
@@ -79,7 +98,8 @@ def map_twix(input):
 
         # convert each categories' mdb list to twix_array
         for category in out[-1].keys():
-            out[-1][category] = twix_array(out[-1][category], meas['hdr'].copy())
+            out[-1][category] = twix_array(out[-1][category],
+                                           meas['hdr'].copy())
 
         # set few default flag(s) for 'image' category
         if 'image' in out[-1]:
@@ -96,61 +116,83 @@ def map_twix(input):
     return out
 
 
-
 class twix_array():
 
     def __init__(self, mdb_list, hdr=None, flags=None):
-        
+
         self.mdb_list = mdb_list.copy()
         self.hdr = None
         if hdr is not None:
             self.hdr = copy.deepcopy(hdr)
 
         self.rs_traj = calc_regrid_traj(self.hdr)
-        
+
         # delete 'ACQEND' and 'SYNCDATA' flags if present
-        twixtools.del_from_mdb_list(self.mdb_list, lambda mdb: mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'))
+        twixtools.del_from_mdb_list(
+            self.mdb_list,
+            lambda b: b.is_flag_set('ACQEND') or b.is_flag_set('SYNCDATA'))
 
-        self.dim_order = ["Ide", "Idd", "Idc", "Idb", "Ida", "Seg", "Set", "Rep", "Phs", "Eco", "Par", "Sli", "Ave", "Lin", "Cha", "Col"]
-        self.dt_dims = np.dtype([(name, "<u2") for name in self.dim_order])  # dtype that includes all dims
-        self.dt_counters = np.dtype([(name, "<u2") for name in self.dim_order[:-2]])  # dtype that only includes counters (no cha & col)
+        self.dim_order = [
+            "Ide", "Idd", "Idc", "Idb", "Ida", "Seg", "Set", "Rep",
+            "Phs", "Eco", "Par", "Sli", "Ave", "Lin", "Cha", "Col"
+        ]
 
-        self.key_map = {'Ide': 'ushIde', 'Idd': 'ushIdd', 'Idc': 'ushIdc', 'Idb': 'ushIdb', 'Ida': 'ushIda',
-        'Seg': 'ushSeg', 'Set': 'ushSet', 'Rep': 'ushRepetition', 'Phs': 'ushPhase', 'Eco': 'ushEcho',
-        'Par': 'ushPartition', 'Sli': 'ushSlice', 'Ave': 'ushAcquisition', 'Lin': 'ushLine'}
-        self.sorted_mdh_keys = [self.key_map[dim] for dim in self.dims[:-2]]
-        
+        # dtype that includes all dims:
+        self.dt_dims = np.dtype([(name, "<u2") for name in self.dim_order])
+
+        # dtype that only includes counters (no cha & col)
+        self.dt_counters = np.dtype([(n, "<u2") for n in self.dim_order[:-2]])
+
+        self.key_map = {
+            'Ide': 'ushIde', 'Idd': 'ushIdd', 'Idc': 'ushIdc',
+            'Idb': 'ushIdb', 'Ida': 'ushIda', 'Seg': 'ushSeg',
+            'Set': 'ushSet', 'Rep': 'ushRepetition', 'Phs': 'ushPhase',
+            'Eco': 'ushEcho', 'Par': 'ushPartition', 'Sli': 'ushSlice',
+            'Ave': 'ushAcquisition', 'Lin': 'ushLine'
+        }
+
+        self.sorted_mdh_keys = [self.key_map[d] for d in self.dim_order[:-2]]
+
         # determine k-space shape by finding max index
         shp = np.ones(len(self.dt_dims), dtype=self.dt_dims[1])
-        self._first_ix = 1024 * np.ones(len(self.dt_dims)-2, dtype=self.dt_dims[1])
+        self._first_ix = 1024 * np.ones(len(self.dt_dims)-2,
+                                        dtype=self.dt_dims[1])
 
         for mdb in self.mdb_list:
-
             sLC = mdb.mdh['sLC']
-            sLC = np.asarray(sLC[self.sorted_mdh_keys].tolist(), dtype = sLC[0].dtype)
+            sLC = np.asarray(sLC[self.sorted_mdh_keys].tolist(),
+                             dtype=sLC[0].dtype)
             req_shape = 1 + sLC
             # add channels & columns
-            req_shape = np.concatenate([req_shape, [mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']]])
+            req_shape = np.concatenate([req_shape,
+                                        [mdb.mdh['ushUsedChannels'],
+                                         mdb.mdh['ushSamplesInScan']]])
             shp = np.maximum(shp, req_shape)
             self._first_ix = np.minimum(self._first_ix, sLC)
 
         self.base_size = np.ones(1, dtype=self.dt_dims)[0]
-        for key, item in enumerate(shp): # complicated, can we do this converston better (proper casting?)
-            self.base_size[key]=item 
-        # todo: coil-compression ('cc', 'ncc')
-        self._flags = {'average': {item:False for item in self.dims}, 'remove_os': False, 'regrid': False, 'skip_empty_lead': False, 'zf_missing_lines': False}
-        
-        # averages should be averaged by default:
-        self._flags['average']['Ave'] = True
+        for key, item in enumerate(shp):
+            # complicated, can we do this conversion better? (proper casting?)
+            self.base_size[key] = item
 
-        # set flags that were passed in constructor call        
+        self._flags = {'average': {item: False for item in self.dim_order},
+                       'remove_os': False,
+                       'regrid': False,
+                       'squeeze_ave_dims': False,
+                       'skip_empty_lead': False,
+                       'zf_missing_lines': False}
+
+        # 'Ave' should be averaged by default, Idx indices should be ignored:
+        for dim in ['Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Ave']:
+            self._flags['average'][dim] = True
+
+        # set flags that were passed in constructor call
         if flags is not None:
-            for key,item in flags.items():
+            for key, item in flags.items():
                 try:
                     self.flags[key] = item.copy()
-                except:
+                except Exception:
                     self.flags[key] = item
-
 
     def copy(self):
         return self.__copy__()
@@ -161,11 +203,14 @@ class twix_array():
 
     @property
     def dims(self):
-        return list(self.dt_dims.names)
+        if not self.flags['squeeze_ave_dims']:
+            return self.dim_order
+        else:
+            return [n for n in self.dim_order if not self.flags['average'][n]]
 
     @property
     def non_singleton_dims(self):
-        return [dim for dim in self.dims if self.size[dim]>1]
+        return [dim for dim in self.dim_order if self.size[dim] > 1]
 
     @property
     def ndim(self):
@@ -173,46 +218,60 @@ class twix_array():
 
     @property
     def flags(self):
-        # wip: although the flags dict itself is write-protected, its entries are currently not and can be overwritten by garbage!
+        # wip: although the flags dict itself is write-protected, its entries
+        #      are currently not and can be overwritten by garbage!
         return self._flags
 
     @property
     def size(self):
-        # self.size returns the shape of the data as a dtype with named elements for easier access
+        # self.size returns the shape of the data as a dtype with named
+        # elements for easier access
+        # averaged dims will be kept even if 'squeeze_ave_dims' is set to True
         sz = self.base_size.copy()
-        if self.flags['remove_os']:
-            sz[-1] //= 2
+        if not self.flags['average']['Col'] and self.flags['remove_os']:
+            sz[self.dim_order.index('Col')] //= 2
 
         if self.hdr is not None and self.flags['zf_missing_lines']:
-            hdr_lin = self.hdr['MeasYaps']['sKSpace']['lPhaseEncodingLines']
-            sz['Lin'] = max(sz['Lin'], hdr_lin)
-            if self.hdr['MeasYaps']['sKSpace']['ucDimension'] > 2:
+            if not self.flags['average']['Lin']:
+                hdr_lin = \
+                    self.hdr['MeasYaps']['sKSpace']['lPhaseEncodingLines']
+                sz['Lin'] = max(sz['Lin'], hdr_lin)
+            if not self.flags['average']['Par']\
+                    and self.hdr['MeasYaps']['sKSpace']['ucDimension'] > 2:
                 hdr_par = self.hdr['MeasYaps']['sKSpace']['lPartitions']
                 sz['Par'] = max(sz['Par'], hdr_par)
-            
+
         if self.flags['skip_empty_lead']:
-            sz['Lin'] -= self._first_ix[self.dim_order.index('Lin')]
-            sz['Par'] -= self._first_ix[self.dim_order.index('Par')]
+            if not self.flags['average']['Lin']:
+                sz['Lin'] -= self._first_ix[self.dim_order.index('Lin')]
+            if not self.flags['average']['Par']:
+                sz['Par'] -= self._first_ix[self.dim_order.index('Par')]
 
         for dim in range(len(sz)):
-            if self.flags['average'][self.dims[dim]]:
+            if self.flags['average'][self.dim_order[dim]]:
                 sz[dim] = 1
         return sz
 
-
     @property
     def shape(self):
-        # self.shape is the more numpy compatible version of self.size by returning a tuple
-        return self.size.item()
-
+        # self.shape is the more numpy compatible version of self.size by
+        # returning a tuple
+        # 'squeeze_ave_dims': averaged dims are removed from shape
+        if not self.flags['squeeze_ave_dims']:
+            return self.size.item()
+        else:
+            return [sz for sz, name in zip(self.size.item(),
+                    self.size.dtype.names) if not self.flags['average'][name]]
 
     def __getitem__(self, index):
         # implement array slicing here
         # returns numpy.ndarray
         if not isinstance(index, tuple):
-            index = (index,) # make sure to pass along tuple
+            index = (index,)  # make sure to pass along tuple
         if len(index) > self.ndim:
-            raise IndexError("too many indices for array: array is %d-dimensional, but %d were indexed"%(self.ndim, len(index)))
+            raise IndexError(
+                "too many indices for array: array is %d-dimensional, "
+                "but %d were indexed" % (self.ndim, len(index)))
         ellipsis_in_index = False
         selection = list()
         remove_dim = list()
@@ -221,17 +280,20 @@ class twix_array():
                 key += self.ndim - len(index)
             if item is Ellipsis:
                 if ellipsis_in_index:
-                    raise IndexError("an index can only have a single ellipsis ('...')")
+                    raise IndexError(
+                        "an index can only have a single ellipsis ('...')")
                 ellipsis_in_index = True
                 # fill selection with slice(None)
-                for k in range(self.ndim - len(index) + 1):
+                for _ in range(self.ndim - len(index) + 1):
                     selection.append(slice(None))
             elif isinstance(item, slice):
                 if item == slice(None):
                     selection.append(item)
                     continue
                 if item.start is not None and item.start > self.shape[key]:
-                    raise IndexError("index %d is out of bounds for axis %d with size %d"%(item.start, key, self.shape[key]))
+                    raise IndexError(
+                        "index %d is out of bounds for axis %d with size %d"
+                        % (item.start, key, self.shape[key]))
                 else:
                     ix = item.indices(self.shape[key])
                     selection.append(range(ix[0], ix[1], ix[2]))
@@ -240,34 +302,49 @@ class twix_array():
                     item = [item]
                     remove_dim.append(key)
                 for i in item:
-                    if (i < -int(self.shape[key])) or (i>=self.shape[key]):
-                        raise IndexError("index %d is out of bounds for axis %d with size %d"%(i, key, self.shape[key]))
+                    if (i < -int(self.shape[key])) or (i >= self.shape[key]):
+                        raise IndexError("index %d is out of bounds for axis "
+                                         "%d with size %d"
+                                         % (i, key, self.shape[key]))
                 selection.append(item)
-        
+
         target_sz = list(self.shape)
-         
-         # to follow the python convention, single indices will reduce the output's dimensionality
+
+        # to follow the python convention, single indices
+        # will reduce the output's dimensionality
         for key, item in enumerate(selection):
             if item != slice(None):
                 target_sz[key] = len(item)
 
         out = np.zeros(target_sz, dtype='complex64')
-        out = out.reshape([-1, out.shape[-2], out.shape[-1]]) # for now 'vectorize' it
+        # make sure that cha & col dim exist
+        if self.flags['squeeze_ave_dims']:
+            if self.flags['average']['Cha']:
+                out = out[..., np.newaxis]
+            if self.flags['average']['Col']:
+                out = out[..., np.newaxis]
+            if out.ndim < 3:
+                out = out[np.newaxis]
+
+        # 'vectorize' the output array for now
+        out = out.reshape([-1, out.shape[-2], out.shape[-1]])
 
         # average counter to scale the data properly later
         ave_counter = np.zeros(np.prod(out.shape[:-2]), dtype=np.uint16)
 
-        # now that we have our selection and allocated memory, we can read in the data
+        # now that we have our selection, we can read the data
         # for this, we simply go through all mdb's and fill them in if selected
         # this is not very efficient for large files, but fool-proof
         for mdb in self.mdb_list:
 
-            counters = mdb.mdh['sLC'][self.sorted_mdh_keys].astype(self.dt_counters)
-            
+            counters = mdb.mdh['sLC'][self.sorted_mdh_keys]\
+                .astype(self.dt_counters)
+
             if self.flags['skip_empty_lead']:
-                lpos, ppos = self.dim_order.index('Lin'), self.dim_order.index('Par')
+                lpos, ppos = self.dim_order.index('Lin'),\
+                    self.dim_order.index('Par')
                 counters[lpos] -= self._first_ix[lpos]
-                counters[ppos] -= self._first_ix[ppos   ]
+                counters[ppos] -= self._first_ix[ppos]
 
             # check if we have to read this mdb
             do_not_read = False
@@ -275,7 +352,7 @@ class twix_array():
                 if sel == slice(None):
                     # all data selected, no counter check required for this dim
                     continue
-                if key>=self.ndim-2:
+                if key >= self.ndim-2:
                     # skip col & cha
                     continue
                 if self.flags['average'][self.dims[key]]:
@@ -300,25 +377,28 @@ class twix_array():
             if self.flags['average']['Col']:
                 data = data.mean(-1, keepdims=True)
             else:
-                if self.flags['regrid'] and self.rs_traj is not None and not mdb.is_flag_set('SKIP_REGRIDDING'):
-                    data = perform_regrid(data, self.rs_traj, mdb.mdh["fReadOutOffcentre"])
+                if self.flags['regrid'] and self.rs_traj is not None\
+                        and not mdb.is_flag_set('SKIP_REGRIDDING'):
+                    data = perform_regrid(
+                        data, self.rs_traj, mdb.mdh["fReadOutOffcentre"])
 
                 if self.flags['remove_os']:
-                    data,_ = remove_oversampling(data)
+                    data, _ = remove_oversampling(data)
 
             # reflect data if mdh flag is set
             if mdb.is_flag_set('REFLECT'):
-                data = data[...,::-1]
+                data = data[..., ::-1]
 
             ix = int(0)
             requests = 1
-            for dim in range(self.ndim-2):
-                if self.flags['average'][self.dims[dim]]:
+            for key, dim in enumerate(self.dims[:-2]):
+                if self.flags['average'][dim]:
                     pass  # nothing to add
-                elif dim >= len(selection) or selection[dim] == slice(None):
-                    ix += int(counters[dim] * np.prod(target_sz[dim+1:-2]))
+                elif key >= len(selection) or selection[key] == slice(None):
+                    ix += int(counters[dim] * np.prod(target_sz[key+1:-2]))
                 else:
-                    ix += int(selection[dim].index(counters[dim]) * np.prod(target_sz[dim+1:-2]))
+                    ix += int(selection[key].index(counters[dim])
+                              * np.prod(target_sz[key+1:-2]))
 
             # only keep selected channels & columns
             if len(selection) > self.ndim-2:
@@ -326,7 +406,7 @@ class twix_array():
                 data = data[selection[-2]]
             if len(selection) > self.ndim-1:
                 # select columns
-                data = data[:,selection[-1]]
+                data = data[:, selection[-1]]
 
             out[ix] += requests * data
 
@@ -337,8 +417,9 @@ class twix_array():
         ave_counter = np.maximum(ave_counter, 1)
         out /= ave_counter[..., np.newaxis, np.newaxis]
 
-        # to follow the numpy convention, single indices will reduce the output's dimensionality
-        target_sz = [target_sz[key] for key in range(len(target_sz)) if key not in remove_dim]
+        # to follow the numpy convention,
+        # single indices will reduce the output's dimensionality
+        target_sz = [target_sz[key] for key in range(len(target_sz))
+                     if key not in remove_dim]
 
         return out.reshape(target_sz)
-

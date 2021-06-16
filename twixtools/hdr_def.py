@@ -4,8 +4,8 @@ align_to_nbytes = 512
 max_raidfile_entries = 64
 
 # 8B
-MrParcRaidFileHeader = [("hdSize_", "<u4"), # ID???
-                        ("count_", "<u4")]  # # of meas
+MrParcRaidFileHeader = [("hdSize_", "<u4"),     # ID???
+                        ("count_", "<u4")]      # # of meas
 
 # 152B
 MrParcRaidFileEntry = [("measId_", "<u4"),      # MeasID
@@ -24,5 +24,5 @@ MrParcRaidFileEntry = np.dtype(MrParcRaidFileEntry)
 
 
 SingleMeasInit = [("hdr_len", "<u4"),
-                  ("unknown", "<u4")] # usually value 4
+                  ("unknown", "<u4")]  # usually value 4
 SingleMeasInit = np.dtype(SingleMeasInit)

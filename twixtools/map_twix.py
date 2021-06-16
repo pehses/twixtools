@@ -46,8 +46,58 @@ twix_category = {
 
 
 def map_twix(input):
-    # creates a list of measurements (or a single dict if input was dict)
-    # with data for each measurement mapped to a twix_array object
+    """ creates a list of measurements (or a single dict if input was dict)
+    with data for each measurement mapped to a twix_array object.
+
+    Parameter
+    ----------
+    input: string, int, list, or dict
+        If the filename or its measurement id are passed as a string or int,
+        respectively, the corresponding twix file is first parsed using
+        `read_twix`. Alternatively, it is possible to directly pass a scan list
+        (as returned by `read_twix`) to `map_twix` or to pass only a dict that
+        includes header information and mdb list of a single twix scan.
+
+    Returns:
+    ----------
+    out: dict of twix_array objects
+        A twix_array object is created for each data category (as defined by
+        `twix_category`) that is encountered in the input.
+        The twix_array object includes the header information (twix_array.hdr)
+        as well as access to the underlying data via array slicing of a virtual
+        'k-space'-like array that is designed to closely mimick a
+        `numpy.ndarray` object (and indeed returns a `numpy.ndarray`).
+
+    Examples:
+    ----------
+    Read the data and then select only the twix_array object that contains
+    image data:
+    >>> twix = map_twix(filename)
+    >>> im_array = twix['image']
+
+    Now set a few optional flags that control additional features and determine
+    the shape of the output array:
+    >>> im_array.flags['remove_os'] = True  # activate automatic os removal
+    >>> im_array.flags['regrid'] = True  # activate ramp sampling regridding
+    >>> im_array.flags['average']['Rep'] = True  # average all repetitions
+    >>> im_array.flags['squeeze_ave_dims'] = True  # reduces the dimensionality
+
+    Print all available flags and their values:
+    >>> print(im_array.flags)
+
+    Print the shape of the data and the names of the active dimensions:
+    >>> print(im_array.shape)
+    >>> print(im_array.dims)
+
+    And finally read the data:
+    >>> im_data = im_array[:]
+
+    Alternatively, we can for example only select the data for the first
+    receiver channel:
+    >>> im_data0 = im_array[...,0,:]
+
+    All standard array slicing operations should be supported.
+    """
 
     if isinstance(input, list):
         # assume list of measurements
@@ -117,6 +167,46 @@ def map_twix(input):
 
 
 class twix_array():
+    """Memory-mapped storage class for Siemens MRI raw data.
+
+    The twix array class constructs a virtual multi-dimensional array from a
+    list of mdb objects, that tries to closely resemble a numpy.ndarray with
+    standard array slicing operations. The selected array is then read from the
+    twix file (all reading operations are handled by the Mdb class) and
+    returned in the form of a multi-dimensional numpy.ndarray.
+
+    Note that additional flags can change the shape of the virtual array.
+
+    Important Attributes
+    ----------
+    ndim: int
+        number of output dimensions. May change depending on `flags`.
+    shape: tuple
+        shape of the output array. May change depending on `flags`.
+    dims: list
+        List of names of output dimensions. May change depending on `flags`.
+    non_singleton_dims: list
+        Returns list of non-singleton dimensions.
+    dim_order: list
+        List of the standard dimension order (immutable).
+    hdr: dict
+        twix header information
+    flags: dict
+        Dict of optional flags. The following flags are currently supported:
+        - 'average': dict of bools that determines which dimensions should
+            be averaged.
+        - 'squeeze_ave_dims': bool that determines whether averaged
+            dimensions should be removed/squeezed from the array's shape.
+        - 'remove_os': oversampling removal. Reduces the number of columns
+            by a factor of two.
+        - 'regrid': bool that controls ramp-sampling regridding (if applicable)
+        - 'skip_empty_lead': skips to first line & partition that is found
+            in mdb list (e.g. if first line counter is 10, the output array
+            starts at line counter 10).
+        - 'zf_missing_lines': zero-fill k-space to include lines and partitions
+           that are higher than the maximum counter found in the mdb list, but
+           are still within the k-space matrix according to the twix header.
+    """
 
     def __init__(self, mdb_list, hdr=None, flags=None):
 
@@ -132,7 +222,7 @@ class twix_array():
             self.mdb_list,
             lambda b: b.is_flag_set('ACQEND') or b.is_flag_set('SYNCDATA'))
 
-        self.dim_order = [
+        self._dim_order = [
             "Ide", "Idd", "Idc", "Idb", "Ida", "Seg", "Set", "Rep",
             "Phs", "Eco", "Par", "Sli", "Ave", "Lin", "Cha", "Col"
         ]
@@ -200,6 +290,10 @@ class twix_array():
     def __copy__(self):
         self._flags = self._flags.copy()
         return twix_array(self.mdb_list, self.hdr, self.flags)
+
+    @property
+    def dim_order(self):
+        return self._dim_order
 
     @property
     def dims(self):

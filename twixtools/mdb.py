@@ -178,6 +178,38 @@ class Mdb_local(Mdb_base):
 
 
 class Mdb(Mdb_base):
+    """Memory-mapped storage class for Siemens MRI raw data.
+
+    The function `read_twix` parses the twix file and stores all
+    information (such as counters as well as the position of the data
+    within the twix file) in a list of Mdb objects.
+
+    Important Attributes
+    ----------
+    data: This will read the data from disk and return a 2D numpy
+          array (channels x columns).
+    mdh: measurement data header, stored as a special numpy.dtype.
+         You can get information about the order of the stored
+         information (counters and such) with `print(mdh.dtype)`.
+
+    Important Methods
+    ----------
+    is_image_scan(self): check for an imaging scan.
+
+    is_flag_set(self, flag): check if a certain MDH flag is set.
+
+    set_flag(self, flag, val): set MDH flag to value `val` (True or False).
+
+    get_flags(self): returns a dict with bools for all MDH flags.
+
+    get_active_flags(self): returns a list of all active MDH flags.
+
+    convert_to_local(self): converts the Mdb to a Mdb_local object
+        (no memory-mapping) that allows for array manipulation.
+        This makes it possible to to manipulate data before writing
+        a new twix file using `write_twix`
+    """
+
     def __init__(self, fid=None, version_is_ve=True):
         super().__init__(version_is_ve=version_is_ve)
         self.mem_pos = None

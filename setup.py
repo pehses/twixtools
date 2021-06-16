@@ -5,10 +5,8 @@ Created on Mon Mar 20 07:49:16 2017
 @author: Philipp Ehses
 """
 
-import os
-import subprocess
-import re
-from setuptools import setup, find_packages
+
+from setuptools import setup
 
 
 setup(name='twixtools',
@@ -18,8 +16,8 @@ setup(name='twixtools',
       keywords='twix,siemens,mri',
       author='Philipp Ehses',
       author_email='philipp.ehses@dzne.de',
-      url='',
-      license='',
+      url='https://github.com/pehses/twixtools/',
+      license='MIT License',
       packages=['twixtools'],
       scripts=['twixtools/twixzip.py'],
       zip_safe=False,

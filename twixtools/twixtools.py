@@ -1,4 +1,10 @@
-from __future__ import print_function   # for python 2.7 compatibility
+"""
+twixtools: provides reading and limited writing capability of Siemens MRI raw
+           data files (.dat).
+
+@author: Philipp Ehses (philipp.ehses@dzne.de)
+"""
+
 import os
 import re
 import numpy as np
@@ -12,7 +18,30 @@ import twixtools.hdr_def as hdr_def
 
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
               include_scans=None):
-    """Function for reading siemens twix raw data files."""
+    """Function for reading siemens twix raw data files.
+
+    Parameters
+    ----------
+    infile : filename or measurement id of .dat file
+    read_prot : bool, optional
+        By default, the protocol information is read and parsed
+        (this is also highly recommended)
+    keep_syncdata_and_acqend : bool, optional
+        By default, syncdata and acqend blocks are included in the mdb list.
+        This is helpful for twix writing, but unnecessary otherwise.
+    include_scans: list of scan numbers or None, optional
+        By default, all scans in a multi-raid file are parsed.
+
+    Returns
+    -------
+    out: list of raid file header and twix scans
+        The first element includes the raid file header (bytearray).
+        The twix scans themselves consist of a dict with these elements:
+            - hdr: dict of parsed ascconv and XProtocol header information
+            - hdr_str: header bytearray (used by write_twix)
+            - mdb: list of measurement data blocks -- here is the MRI data
+              use `help(twixtools.mdb.Mdb)` for more information
+    """
     if isinstance(infile, str):
         # assume that complete path is given
         if infile[-4:].lower() != '.dat':
@@ -75,7 +104,6 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         if read_prot:
             fid.seek(pos, os.SEEK_SET)
             hdr = twixprot.parse_twix_hdr(fid)
-            out[-1]['init'] = meas_init
             out[-1]['hdr'] = hdr
             fid.seek(pos, os.SEEK_SET)
             out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
@@ -115,6 +143,18 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
 
 
 def write_twix(scanlist, outfile, version_is_ve=True):
+    """Function for writing siemens twix raw data files.
+
+    Parameters
+    ----------
+    scanlist: list of raid file header list and twix scan(s)
+    outfile: output filename for twix file (.dat)
+    version_is_ve: bool that determines what whether to write a VA/VB
+        or VD/VE compatible twix file.
+        IMPORTANT: This tool does not allow for conversion between versions.
+        This bool should be set to the original twix file version!
+        IMPORTANT: `write_twix` currently only supports VE twix files!
+    """
 
     def write_sync_bytes(fid):
         syncbytes = (512-(fid.tell()) % 512) % 512
@@ -197,7 +237,9 @@ def write_twix(scanlist, outfile, version_is_ve=True):
 
 
 def fix_scancounters(mdb_list, start_cnt=1):
-    # ulScanCounters in mdb_list must be consecutive integers
+    ''' makes sure that all ulScanCounter in mdb_list are consecutive integers
+    This is necessary if mdbs are added/removed to/from a mdb_list.
+    '''
     cnt = start_cnt
     for mdb in mdb_list:
         if mdb.is_flag_set('SYNCDATA'):  # ignore SYNCDATA
@@ -209,7 +251,17 @@ def fix_scancounters(mdb_list, start_cnt=1):
 
 
 def del_from_mdb_list(mdb_list, function):
-    # helper function to safely remove multiple items from mdb_list at once
+    ''' helper function to safely remove multiple items from mdb_list at once
+    Parameters
+    ----------
+    mdb_list: input list of mdbs
+    function: function used to filter mdbs
+
+    Example
+    --------
+    Remove all mdbs from mdb_list which have the flag 'noname60' set to True.
+    >>> del_from_mdb_list(mdb_list, lambda mdb: mdb.is_flag_set('noname60'))
+    '''
 
     ind2remove = [key for key, mdb in enumerate(mdb_list) if function(mdb)]
 

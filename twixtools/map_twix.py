@@ -14,6 +14,7 @@ twix_category = {
     'image':         {'RTFEEDBACK': False, 'HPFEEDBACK': False,
                       'REFPHASESTABSCAN': False, 'PHASESTABSCAN': False,
                       'PHASCOR': False, 'NOISEADJSCAN': False,
+                      any: {'PATREFSCAN': False, 'PATREFANDIMASCAN': True},
                       'noname60': False},
     'noise':         {'NOISEADJSCAN': True},
     'phasecorr':     {'PHASCOR': True, 'PATREFSCAN': False, 'noname60': False},
@@ -407,6 +408,9 @@ class twix_array():
 
         target_sz = list(self.shape)
 
+        dims_without_col_cha = [dim for dim in self.dims if dim not in ['Cha', 'Col']]
+        ndim_without_col_cha = len(dims_without_col_cha)
+
         # to follow the python convention, single indices
         # will reduce the output's dimensionality
         for key, item in enumerate(selection):
@@ -420,8 +424,6 @@ class twix_array():
                 out = out[..., np.newaxis]
             if self.flags['average']['Col']:
                 out = out[..., np.newaxis]
-            if out.ndim < 3:
-                out = out[np.newaxis]
 
         # 'vectorize' the output array for now
         out = out.reshape([-1, out.shape[-2], out.shape[-1]])
@@ -449,13 +451,13 @@ class twix_array():
                 if sel == slice(None):
                     # all data selected, no counter check required for this dim
                     continue
-                if key >= self.ndim-2:
+                if key >= ndim_without_col_cha:
                     # skip col & cha
                     continue
                 if self.flags['average'][self.dims[key]]:
                     # averaged dims are completely read
                     continue
-                if counters[key] not in sel:
+                if counters[self.dims[key]] not in sel:
                     do_not_read = True
                     break
 
@@ -487,25 +489,34 @@ class twix_array():
                 data = data[..., ::-1]
 
             ix = int(0)
-            requests = 1
-            for key, dim in enumerate(self.dims[:-2]):
+            # wip: handle multiple requests of same index
+            for key, dim in enumerate(dims_without_col_cha):
                 if self.flags['average'][dim]:
                     pass  # nothing to add
                 elif key >= len(selection) or selection[key] == slice(None):
-                    ix += int(counters[dim] * np.prod(target_sz[key+1:-2]))
+                    ix += int(counters[dim] * np.prod(target_sz[key+1:ndim_without_col_cha]))
                 else:
                     ix += int(selection[key].index(counters[dim])
-                              * np.prod(target_sz[key+1:-2]))
+                              * np.prod(target_sz[key+1:ndim_without_col_cha]))
 
             # only keep selected channels & columns
-            if len(selection) > self.ndim-2:
+            if 'Cha' not in self.dims:
+                # remove channel dim
+                data = data[0]
+            elif len(selection) > ndim_without_col_cha:
                 # select channels
-                data = data[selection[-2]]
-            if len(selection) > self.ndim-1:
+                if 'Col' in self.dims:
+                    data = data[selection[-2]]
+                else:
+                    data = data[selection[-1]]
+            if 'Col' not in self.dims:
+                # remove column dim
+                data = data[...,0]
+            elif len(selection) > self.ndim-1:
                 # select columns
                 data = data[:, selection[-1]]
 
-            out[ix] += requests * data
+            out[ix] += data
 
             # increment average counter for ix
             ave_counter[ix] += 1

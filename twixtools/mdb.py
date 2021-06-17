@@ -4,12 +4,6 @@ import os
 import twixtools.mdh_def as mdh_def
 
 
-def unpack_bits(mask):
-    # numpy's unpackbits does not work correctly for some reason
-    mask = mask.view(np.uint64)[0]
-    return np.bitwise_and(mask, 2**np.arange(8*mask.nbytes)).astype(bool)
-
-
 class Mdb_base(object):
     def __init__(self, version_is_ve=True):
         self.version_is_ve = version_is_ve
@@ -31,8 +25,7 @@ class Mdb_base(object):
 
     def _get_dma_len(self):
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
-            dma_len = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
-            return dma_len
+            return np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
 
         # override value found in 'ulFlagsAndDMALength' which is sometimes
         # not quite correct (e.g. in case PackBit is set)

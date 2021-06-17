@@ -357,59 +357,79 @@ class twix_array():
         else:
             return [sz for sz, name in zip(self.size.item(),
                     self.size.dtype.names) if not self.flags['average'][name]]
-
+    
     def __getitem__(self, index):
         # implement array slicing here
         # returns numpy.ndarray
+        
+        self_dims = self.dims
+        self_ndim = self.ndim
+        self_shape = self.shape
+
         if not isinstance(index, tuple):
             index = (index,)  # make sure to pass along tuple
-        if len(index) > self.ndim:
+        if len(index) > self_ndim:
             raise IndexError(
                 "too many indices for array: array is %d-dimensional, "
-                "but %d were indexed" % (self.ndim, len(index)))
+                "but %d were indexed" % (self_ndim, len(index)))
         ellipsis_in_index = False
         selection = list()
         remove_dim = list()
         for key, item in enumerate(index):
             if ellipsis_in_index:
-                key += self.ndim - len(index)
+                key += self_ndim - len(index)
             if item is Ellipsis:
                 if ellipsis_in_index:
                     raise IndexError(
                         "an index can only have a single ellipsis ('...')")
                 ellipsis_in_index = True
                 # fill selection with slice(None)
-                for _ in range(self.ndim - len(index) + 1):
+                for _ in range(self_ndim - len(index) + 1):
                     selection.append(slice(None))
             elif isinstance(item, slice):
                 if item == slice(None):
                     selection.append(item)
                     continue
-                if item.start is not None and item.start > self.shape[key]:
+                if item.start is not None and item.start > self_shape[key]:
                     raise IndexError(
                         "index %d is out of bounds for axis %d with size %d"
-                        % (item.start, key, self.shape[key]))
+                        % (item.start, key, self_shape[key]))
                 else:
-                    ix = item.indices(self.shape[key])
+                    ix = item.indices(self_shape[key])
                     selection.append(range(ix[0], ix[1], ix[2]))
             else:
                 if isinstance(item, int):
                     item = [item]
                     remove_dim.append(key)
                 for k, i in enumerate(item):
-                    if (i < -int(self.shape[key])) or (i >= self.shape[key]):
+                    if (i < -self_shape[key]) or (i >= self_shape[key]):
                         raise IndexError("index %d is out of bounds for axis "
                                          "%d with size %d"
-                                         % (i, key, self.shape[key]))
+                                         % (i, key, self_shape[key]))
                     # make sure to only keep positive indices
                     if i < 0:
                         item[k] = self.shape[key] + i
                 selection.append(item)
 
-        target_sz = list(self.shape)
+        average_cha = self.flags['average']['Cha']
+        average_col = self.flags['average']['Col']
+        regrid = self.flags['regrid']
+        remove_os = self.flags['remove_os']
+        skip_empty_lead = self.flags['skip_empty_lead']
 
-        counter_dims = [dim for dim in self.dims if dim not in ['Cha', 'Col']]
-        counter_ndim = len(counter_dims)
+        mdh_dims = [dim for dim in self_dims if dim not in ['Cha', 'Col']]
+        mdh_ndim = len(mdh_dims)
+        sLC_sel = [self.key_map[d] for d in mdh_dims]
+        dims_averaged = [self.flags['average'][dim] for dim in mdh_dims]
+
+        if skip_empty_lead:
+            lpos, ppos = self.dim_order.index('Lin'),\
+                self.dim_order.index('Par')
+            sLC_names = [item[0] for item in twixtools.mdh_def.mdhLC]
+            sLC_lpos, sLC_ppos = sLC_names.index('ushLine'),\
+                sLC_names.index('ushPartition')
+ 
+        target_sz = list(self_shape)
 
         # to follow the python convention, single indices
         # will reduce the output's dimensionality
@@ -420,9 +440,9 @@ class twix_array():
         out = np.zeros(target_sz, dtype='complex64')
         # make sure that cha & col dim exist
         if self.flags['squeeze_ave_dims']:
-            if self.flags['average']['Cha']:
+            if average_cha:
                 out = out[..., np.newaxis]
-            if self.flags['average']['Col']:
+            if average_col:
                 out = out[..., np.newaxis]
 
         # 'vectorize' the output array for now
@@ -436,14 +456,17 @@ class twix_array():
         # this is not very efficient for large files, but fool-proof
         for mdb in self.mdb_list:
 
-            counters = mdb.mdh['sLC'][self.sorted_mdh_keys]\
-                .astype(self.dt_counters)
+            sLC = mdb.mdh['sLC'].copy()
 
-            if self.flags['skip_empty_lead']:
-                lpos, ppos = self.dim_order.index('Lin'),\
-                    self.dim_order.index('Par')
-                counters[lpos] -= self._first_ix[lpos]
-                counters[ppos] -= self._first_ix[ppos]
+#            # test early exit (for profiling)
+#            if sLC['ushRepetition']!=selection[0]:
+#                continue
+
+            if skip_empty_lead:
+                sLC[sLC_lpos] -= self._first_ix[lpos]
+                sLC[sLC_ppos] -= self._first_ix[ppos]
+
+            counters = sLC[sLC_sel]
 
             # check if we have to read this mdb
             do_not_read = False
@@ -451,13 +474,13 @@ class twix_array():
                 if sel == slice(None):
                     # all data selected, no counter check required for this dim
                     continue
-                if key >= counter_ndim:
+                if key >= mdh_ndim:
                     # skip col & cha
                     continue
-                if self.flags['average'][self.dims[key]]:
+                if dims_averaged[key]:
                     # averaged dims are completely read
                     continue
-                if counters[self.dims[key]] not in sel:
+                if counters[key] not in sel:
                     do_not_read = True
                     break
 
@@ -469,19 +492,19 @@ class twix_array():
             data = mdb.data
 
             # average cha if requested
-            if self.flags['average']['Cha']:
+            if average_cha:
                 data = data.mean(-2, keepdims=True)
 
             # average col or apply oversampling removal if requested
-            if self.flags['average']['Col']:
+            if average_col:
                 data = data.mean(-1, keepdims=True)
             else:
-                if self.flags['regrid'] and self.rs_traj is not None\
+                if regrid and self.rs_traj is not None\
                         and not mdb.is_flag_set('SKIP_REGRIDDING'):
                     data = perform_regrid(
                         data, self.rs_traj, mdb.mdh["fReadOutOffcentre"])
 
-                if self.flags['remove_os']:
+                if remove_os:
                     data, _ = remove_oversampling(data)
 
             # reflect data if mdh flag is set
@@ -489,32 +512,35 @@ class twix_array():
                 data = data[..., ::-1]
 
             ix = [int(0)]
-            for key, dim in enumerate(counter_dims):
-                if self.flags['average'][dim]:
+            for key in range(mdh_ndim):
+                if dims_averaged[key]:
                     pass  # nothing to add
                 elif key >= len(selection) or selection[key] == slice(None):
-                    ix = [i + int(counters[dim] * np.prod(target_sz[key+1:counter_ndim])) for i in ix]
+                    block_sz = np.prod(target_sz[key+1:mdh_ndim])
+                    ix = [i + int(counters[key] * block_sz) for i in ix]
                 else:
                     ix_new = list()
-                    for sel_index in list_indices(selection[key], counters[dim]):
+                    block_sz = np.prod(target_sz[key+1:mdh_ndim])
+                    for sel_ix in list_indices(selection[key], counters[key]):
+                        offset = sel_ix * block_sz
                         for i in ix:
-                            ix_new.append(int(i + sel_index * np.prod(target_sz[key+1:counter_ndim])))
+                            ix_new.append(int(i + offset))
                     ix = ix_new
 
             # only keep selected channels & columns
-            if 'Cha' not in self.dims:
+            if 'Cha' not in self_dims:
                 # remove channel dim
                 data = data[0]
-            elif len(selection) > counter_ndim:
+            elif len(selection) > mdh_ndim:
                 # select channels
-                if 'Col' in self.dims:
+                if 'Col' in self_dims:
                     data = data[selection[-2]]
                 else:
                     data = data[selection[-1]]
-            if 'Col' not in self.dims:
+            if 'Col' not in self_dims:
                 # remove column dim
-                data = data[...,0]
-            elif len(selection) > self.ndim-1:
+                data = data[..., 0]
+            elif len(selection) > self_ndim-1:
                 # select columns
                 data = data[:, selection[-1]]
 

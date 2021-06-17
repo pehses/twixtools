@@ -81,7 +81,7 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
 
     reflect_data = False
     if (cc_active and (cc_mode=='gcc' or cc_mode=='gcc_bart')):
-        reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
+        reflect_data = bool(int(mdh['aulEvalInfoMask']) & (1 << 24))
         if reflect_data:
             data = data[:,::-1]
 
@@ -124,11 +124,11 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
 
 def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
 
-    if cc_mode=='scc_bart' or cc_mode=='gcc_bart':
+    if cc_mode == 'scc_bart' or cc_mode == 'gcc_bart':
         import bart
  
     if data.dtype == np.dtype("S1"):
-        return data # nothing to do in case of bytearray
+        return data  # nothing to do in case of bytearray
 
     if inv_mtx is None:
         inv_mtx = False
@@ -138,16 +138,16 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
     x_in_timedomain = True
 
     reflect_data = False
-    if cc_mode=='gcc' or cc_mode=='gcc_bart':
+    if cc_mode == 'gcc' or cc_mode == 'gcc_bart':
         # for performance reasons, x dim was stored in freq. domain
-        reflect_data = bool(mdh['aulEvalInfoMask'][0] & (1 << 24))
+        reflect_data = bool(int(mdh['aulEvalInfoMask']) & (1 << 24))
         if reflect_data:
             data = data[:,::-1]
 
-    if cc_mode=='scc' or cc_mode=='gcc':
+    if cc_mode == 'scc' or cc_mode == 'gcc':
         nc = inv_mtx.shape[1]
         ncc = inv_mtx.shape[-1]
-        if cc_mode=='scc':
+        if cc_mode == 'scc':
             try:
                 data = inv_mtx[0] @ data
             except:

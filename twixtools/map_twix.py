@@ -408,8 +408,8 @@ class twix_array():
 
         target_sz = list(self.shape)
 
-        dims_without_col_cha = [dim for dim in self.dims if dim not in ['Cha', 'Col']]
-        ndim_without_col_cha = len(dims_without_col_cha)
+        counter_dims = [dim for dim in self.dims if dim not in ['Cha', 'Col']]
+        counter_ndim = len(counter_dims)
 
         # to follow the python convention, single indices
         # will reduce the output's dimensionality
@@ -451,7 +451,7 @@ class twix_array():
                 if sel == slice(None):
                     # all data selected, no counter check required for this dim
                     continue
-                if key >= ndim_without_col_cha:
+                if key >= counter_ndim:
                     # skip col & cha
                     continue
                 if self.flags['average'][self.dims[key]]:
@@ -488,22 +488,24 @@ class twix_array():
             if mdb.is_flag_set('REFLECT'):
                 data = data[..., ::-1]
 
-            ix = int(0)
-            # wip: handle multiple requests of same index
-            for key, dim in enumerate(dims_without_col_cha):
+            ix = [int(0)]
+            for key, dim in enumerate(counter_dims):
                 if self.flags['average'][dim]:
                     pass  # nothing to add
                 elif key >= len(selection) or selection[key] == slice(None):
-                    ix += int(counters[dim] * np.prod(target_sz[key+1:ndim_without_col_cha]))
+                    ix = [i + int(counters[dim] * np.prod(target_sz[key+1:counter_ndim])) for i in ix]
                 else:
-                    ix += int(selection[key].index(counters[dim])
-                              * np.prod(target_sz[key+1:ndim_without_col_cha]))
+                    ix_new = list()
+                    for sel_index in list_indices(selection[key], counters[dim]):
+                        for i in ix:
+                            ix_new.append(int(i + sel_index * np.prod(target_sz[key+1:counter_ndim])))
+                    ix = ix_new
 
             # only keep selected channels & columns
             if 'Cha' not in self.dims:
                 # remove channel dim
                 data = data[0]
-            elif len(selection) > ndim_without_col_cha:
+            elif len(selection) > counter_ndim:
                 # select channels
                 if 'Col' in self.dims:
                     data = data[selection[-2]]
@@ -531,3 +533,15 @@ class twix_array():
                      if key not in remove_dim]
 
         return out.reshape(target_sz)
+
+
+def list_indices(seq, item):
+    locs = [seq.index(item, 0)]
+    while True:
+        try:
+            loc = seq.index(item, 1+locs[-1])
+        except ValueError:
+            break
+        else:
+            locs.append(loc)
+    return locs

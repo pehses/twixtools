@@ -187,7 +187,7 @@ class twix_array():
         List of names of output dimensions. May change depending on `flags`.
     non_singleton_dims: list
         Returns list of non-singleton dimensions.
-    dim_order: list
+    dim_order: tuple
         List of the standard dimension order (immutable).
     hdr: dict
         twix header information
@@ -222,10 +222,10 @@ class twix_array():
             self.mdb_list,
             lambda b: b.is_flag_set('ACQEND') or b.is_flag_set('SYNCDATA'))
 
-        self._dim_order = [
+        self._dim_order = (
             "Ide", "Idd", "Idc", "Idb", "Ida", "Seg", "Set", "Rep",
             "Phs", "Eco", "Par", "Sli", "Ave", "Lin", "Cha", "Col"
-        ]
+        )
 
         # dtype that includes all dims:
         self.dt_dims = np.dtype([(name, "<u2") for name in self.dim_order])
@@ -395,11 +395,14 @@ class twix_array():
                 if isinstance(item, int):
                     item = [item]
                     remove_dim.append(key)
-                for i in item:
+                for k, i in enumerate(item):
                     if (i < -int(self.shape[key])) or (i >= self.shape[key]):
                         raise IndexError("index %d is out of bounds for axis "
                                          "%d with size %d"
                                          % (i, key, self.shape[key]))
+                    # make sure to only keep positive indices
+                    if i < 0:
+                        item[k] = self.shape[key] + i
                 selection.append(item)
 
         target_sz = list(self.shape)

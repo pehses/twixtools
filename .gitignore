@@ -5,4 +5,5 @@ dist/
 .idea/
 .ipynb_checkpoints
 .vscode/
-#example_data/
+example_data/gre_del.dat
+example_data/gre_inv.dat

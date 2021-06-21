@@ -34,8 +34,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
 
     Returns
     -------
-    out: list of raid file header and twix scans
-        The first element includes the raid file header (bytearray).
+    out: list of twix scan(s)
         The twix scans themselves consist of a dict with these elements:
             - hdr: dict of parsed ascconv and XProtocol header information
             - hdr_str: header bytearray (used by write_twix)
@@ -73,7 +72,10 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         fid.seek(0, os.SEEK_SET)  # move pos to 9th byte in file
         raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader,
                                    count=1)[0]
-        out.append(raidfile_hdr)
+        # WARNING: 
+        # it is probably no longer necessary to append the raidfile_hdr for lossless twix writing
+        # (as long as there are no changes to the twix format!), so we don't need the following line
+        # out.append(raidfile_hdr)
         NScans = raidfile_hdr["hdr"]["count_"]
         measOffset = list()
         measLength = list()
@@ -101,6 +103,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         meas_init = np.fromfile(fid, dtype=hdr_def.SingleMeasInit, count=1)[0]
         hdr_len = meas_init["hdr_len"]
         out.append(dict())
+        out[-1]['mdb'] = list()
         if read_prot:
             fid.seek(pos, os.SEEK_SET)
             hdr = twixprot.parse_twix_hdr(fid)
@@ -109,7 +112,9 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
             # prot = twixprot(fid, hdr_len, version_is_ve)
             # out[-1]['prot'] = prot
-        out[-1]['mdb'] = list()
+        
+        if version_is_ve:
+            out[-1]['file_id'] = raidfile_hdr['entry'][s]['fileId_']
 
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos
@@ -147,7 +152,7 @@ def write_twix(scanlist, outfile, version_is_ve=True):
 
     Parameters
     ----------
-    scanlist: list of raid file header list and twix scan(s)
+    scanlist: list of twix scan(s)
     outfile: output filename for twix file (.dat)
     version_is_ve: bool that determines what whether to write a VA/VB
         or VD/VE compatible twix file.
@@ -214,15 +219,37 @@ def write_twix(scanlist, outfile, version_is_ve=True):
         if version_is_ve:
             n_scans = len(scan_pos)
             if isinstance(scanlist[0], np.void):
-                # we have a template
+                # we have a template (stored as the first item in scanlist)
                 multi_header = scanlist[0].copy()
             else:
                 # start from scratch
                 multi_header = np.zeros(
                     1, dtype=hdr_def.MultiRaidFileHeader)[0]
-                for _ in range(n_scans):
-                    multi_header['entry']['patName_'] = b'x'*45
-                    multi_header['entry']['protName_'] = b'noname'
+                first_scan = len(scanlist) - n_scans
+                for scan in range(n_scans):
+                    ix = scan + first_scan
+                    pat = b'x' * 20
+                    prot = b'noname'
+                    meas_id = np.uint32(0)
+                    file_id = np.uint32(0)
+                    if 'file_id' in scanlist[ix]:
+                        file_id = scanlist[ix]['file_id']
+                    if 'hdr' in scanlist[ix] and 'Config' in scanlist[ix]['hdr']:
+                        config = scanlist[ix]['hdr']['Config']
+                        if 'tPatientName' in config:
+                            pat = config['tPatientName'].encode()
+                            if all([item == 'x' for item in pat.decode()]):
+                                # fix number of 'x' for anonymized names (this is just a guess)
+                                pat = b'x' * min(64, len(pat)+9)
+                        if 'SequenceDescription' in config:
+                            prot = config['SequenceDescription'].encode()
+                        if 'SequenceDescription' in config:
+                            meas_id = np.uint32(config['MeasUID'])
+
+                    multi_header['entry']['measId_'][scan] = meas_id
+                    multi_header['entry']['fileId_'][scan] = file_id
+                    multi_header['entry']['patName_'][scan] = pat
+                    multi_header['entry']['protName_'][scan] = prot
 
             # write NScans
             multi_header['hdr']['count_'] = n_scans

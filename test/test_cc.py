@@ -19,10 +19,10 @@ class test_scc(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
-                twixzip.compress_twix(infile=infile, outfile=out_h5.name,
-                                      cc_mode='scc', ncc=nc)
-                twixzip.reconstruct_twix(infile=out_h5.name,
-                                         outfile=out_dat.name)
+                twixzip.compress_twix(
+                    infile=infile, outfile=out_h5.name, cc_mode='scc', ncc=nc)
+                twixzip.reconstruct_twix(
+                    infile=out_h5.name, outfile=out_dat.name)
 
             with suppress_stdout_stderr():
                 twix = read_twix(infile)[-1]
@@ -51,10 +51,10 @@ class test_gcc(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
-                twixzip.compress_twix(infile=infile, outfile=out_h5.name,
-                                      cc_mode='gcc', ncc=nc)
-                twixzip.reconstruct_twix(infile=out_h5.name,
-                                         outfile=out_dat.name)
+                twixzip.compress_twix(
+                    infile=infile, outfile=out_h5.name, cc_mode='gcc', ncc=nc)
+                twixzip.reconstruct_twix(
+                    infile=out_h5.name, outfile=out_dat.name)
 
             with suppress_stdout_stderr():
                 twix = read_twix(infile)[-1]

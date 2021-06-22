@@ -17,7 +17,7 @@ try:
     profile
 except NameError:
     def profile(x):
-        pass
+        return x
 
 
 # helper functions:

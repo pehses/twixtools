@@ -110,11 +110,9 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             out[-1]['hdr'] = hdr
             fid.seek(pos, os.SEEK_SET)
             out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
-            # prot = twixprot(fid, hdr_len, version_is_ve)
-            # out[-1]['prot'] = prot
         
         if version_is_ve:
-            out[-1]['file_id'] = raidfile_hdr['entry'][s]['fileId_']
+            out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
 
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos
@@ -217,50 +215,54 @@ def write_twix(scanlist, outfile, version_is_ve=True):
 
         # now write preallocated MultiRaidFileHeader
         if version_is_ve:
-            n_scans = len(scan_pos)
-            if isinstance(scanlist[0], np.void):
-                # we have a template (stored as the first item in scanlist)
-                multi_header = scanlist[0].copy()
-            else:
-                # start from scratch
-                multi_header = np.zeros(
-                    1, dtype=hdr_def.MultiRaidFileHeader)[0]
-                first_scan = len(scanlist) - n_scans
-                for scan in range(n_scans):
-                    ix = scan + first_scan
-                    pat = b'x' * 20
-                    prot = b'noname'
-                    meas_id = np.uint32(0)
-                    file_id = np.uint32(0)
-                    if 'file_id' in scanlist[ix]:
-                        file_id = scanlist[ix]['file_id']
-                    if 'hdr' in scanlist[ix] and 'Config' in scanlist[ix]['hdr']:
-                        config = scanlist[ix]['hdr']['Config']
-                        if 'tPatientName' in config:
-                            pat = config['tPatientName'].encode()
-                            if all([item == 'x' for item in pat.decode()]):
-                                # fix number of 'x' for anonymized names (this is just a guess)
-                                pat = b'x' * min(64, len(pat)+9)
-                        if 'SequenceDescription' in config:
-                            prot = config['SequenceDescription'].encode()
-                        if 'SequenceDescription' in config:
-                            meas_id = np.uint32(config['MeasUID'])
-
-                    multi_header['entry']['measId_'][scan] = meas_id
-                    multi_header['entry']['fileId_'][scan] = file_id
-                    multi_header['entry']['patName_'][scan] = pat
-                    multi_header['entry']['protName_'][scan] = prot
-
-            # write NScans
-            multi_header['hdr']['count_'] = n_scans
-            # write scan_pos & scan_len for each scan
-            for i, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
-                multi_header['entry'][i]['len_'] = len_
-                multi_header['entry'][i]['off_'] = pos_
-
+            
+            multi_header = construct_multiheader(scanlist)
+    
+            # write scan_pos & scan_len for each scan (in case they were changed)
+            for key, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
+                multi_header['entry'][key]['len_'] = len_
+                multi_header['entry'][key]['off_'] = pos_
             # write MultiRaidFileHeader
             fid.seek(0)
             multi_header.tofile(fid)
+
+
+def construct_multiheader(scanlist):
+    multi_header = np.zeros(1, dtype=hdr_def.MultiRaidFileHeader)[0]
+    n_scans = len(scanlist)
+    for key, scan in enumerate(scanlist):
+        if 'raidfile_hdr' in scan:
+            # we have a template
+            multi_header['entry'][key] = scan['raidfile_hdr'].copy()
+        else:  # not really necessary anymore, but may be helpful in future
+            # start from scratch
+            pat = b'x' * 20
+            prot = b'noname'
+            meas_id = np.uint32(0)
+            file_id = np.uint32(0)
+            if 'file_id' in scan:
+                file_id = scan['file_id']
+            if 'hdr' in scan and 'Config' in scan['hdr']:
+                config = scan['hdr']['Config']
+                if 'tPatientName' in config:
+                    pat = config['tPatientName'].encode()
+                    if all([item == 'x' for item in pat.decode()]):
+                        # fix number of 'x' for anonymized names (this is just a guess)
+                        pat = b'x' * min(64, len(pat)+9)
+                if 'SequenceDescription' in config:
+                    prot = config['SequenceDescription'].encode()
+                if 'SequenceDescription' in config:
+                    meas_id = np.uint32(config['MeasUID'])
+
+            multi_header['entry']['measId_'][key] = meas_id
+            multi_header['entry']['fileId_'][key] = file_id
+            multi_header['entry']['patName_'][key] = pat
+            multi_header['entry']['protName_'][key] = prot
+
+    # write NScans
+    multi_header['hdr']['count_'] = n_scans
+
+    return multi_header
 
 
 def fix_scancounters(mdb_list, start_cnt=1):

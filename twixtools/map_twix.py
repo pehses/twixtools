@@ -115,7 +115,7 @@ def map_twix(input):
     for meas in twix:
 
         if not isinstance(meas, dict):
-            continue  # first "meas" may store first 10240 bytes of file
+            continue
 
         # append new dict to output list
         out.append(dict())

@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 import tables
 import twixtools
+from .twixtools import construct_multiheader
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
 import pyzfp
@@ -368,7 +369,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
     if cc_mode or zfp:
         # # calibrate noise decorrelation matrix for better compression
         # noise = list()
-        # for mdb in twix[1]['mdb']:
+        # for mdb in twix[0]['mdb']:
         #     if mdb.is_flag_set('NOISEADJSCAN'):
         #         noise.append(mdb.data)
         # if len(noise)>0:
@@ -407,8 +408,9 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             f.root._v_attrs.zfp_prec = -1
         else:
             f.root._v_attrs.zfp_prec = zfp_prec
-            
-        f.create_carray(f.root,"multi_header", obj=np.frombuffer(twix[0].tobytes(), 'S1'), filters=filters)
+        
+        multi_header = construct_multiheader(twix)
+        f.create_carray(f.root,"multi_header", obj=np.frombuffer(multi_header.tobytes(), 'S1'), filters=filters)
         
         if mtx is not None:
             # save mtx for coil compression
@@ -418,7 +420,7 @@ def compress_twix(infile, outfile, remove_os=False, cc_mode=False, ncc=None, cc_
             f.create_carray(f.root,"noise_mtx", obj=noise_mtx, filters=filters)
         
         scanlist = []
-        for meas_key, meas in enumerate(twix[1:]):
+        for meas_key, meas in enumerate(twix):
             scanlist.append("scan%d"%(meas_key))
             grp = f.create_group("/","scan%d"%(meas_key))
             f.create_carray(grp,"hdr_str", obj=meas['hdr_str'], filters=filters)

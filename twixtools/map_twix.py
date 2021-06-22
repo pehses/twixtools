@@ -357,11 +357,11 @@ class twix_array():
         else:
             return [sz for sz, name in zip(self.size.item(),
                     self.size.dtype.names) if not self.flags['average'][name]]
-    
+
     def __getitem__(self, index):
         # implement array slicing here
         # returns numpy.ndarray
-        
+
         self_dims = self.dims
         self_ndim = self.ndim
         self_shape = self.shape
@@ -428,7 +428,7 @@ class twix_array():
             sLC_names = [item[0] for item in twixtools.mdh_def.mdhLC]
             sLC_lpos, sLC_ppos = sLC_names.index('ushLine'),\
                 sLC_names.index('ushPartition')
- 
+
         target_sz = list(self_shape)
 
         # to follow the python convention, single indices

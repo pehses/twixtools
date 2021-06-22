@@ -100,7 +100,7 @@ def parse_ascconv(buffer):
             if vv.group('ix') is not None:
                 currKey.append(int(vv.group('ix')))
 
-        if len(currKey)>0:
+        if len(currKey) > 0:
             update_ascconv(mrprot, currKey, v.group('value'))
 
     return mrprot

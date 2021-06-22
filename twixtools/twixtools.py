@@ -72,9 +72,10 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         fid.seek(0, os.SEEK_SET)  # move pos to 9th byte in file
         raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader,
                                    count=1)[0]
-        # WARNING: 
-        # it is probably no longer necessary to append the raidfile_hdr for lossless twix writing
-        # (as long as there are no changes to the twix format!), so we don't need the following line
+        # WARNING:
+        # it is probably no longer necessary to append the raidfile_hdr for
+        # lossless twix writing (as long as there are no changes to the twix
+        # format!), so we don't need the following line
         # out.append(raidfile_hdr)
         NScans = raidfile_hdr["hdr"]["count_"]
         measOffset = list()
@@ -110,7 +111,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             out[-1]['hdr'] = hdr
             fid.seek(pos, os.SEEK_SET)
             out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
-        
+
         if version_is_ve:
             out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
 
@@ -215,10 +216,8 @@ def write_twix(scanlist, outfile, version_is_ve=True):
 
         # now write preallocated MultiRaidFileHeader
         if version_is_ve:
-            
             multi_header = construct_multiheader(scanlist)
-    
-            # write scan_pos & scan_len for each scan (in case they were changed)
+            # write scan_pos & scan_len for each scan (in case they changed)
             for key, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
                 multi_header['entry'][key]['len_'] = len_
                 multi_header['entry'][key]['off_'] = pos_
@@ -247,7 +246,7 @@ def construct_multiheader(scanlist):
                 if 'tPatientName' in config:
                     pat = config['tPatientName'].encode()
                     if all([item == 'x' for item in pat.decode()]):
-                        # fix number of 'x' for anonymized names (this is just a guess)
+                        # fix number of 'x' for anonymized names (lucky? guess)
                         pat = b'x' * min(64, len(pat)+9)
                 if 'SequenceDescription' in config:
                     prot = config['SequenceDescription'].encode()

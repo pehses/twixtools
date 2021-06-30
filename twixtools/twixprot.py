@@ -1,6 +1,15 @@
 import re
 from itertools import chain
 
+"""
+This file contains functions that parse Siemens protocol headers (in ASCONV
+and XPROT format).
+
+Acknowledgement:
+Most of the string parsing code is taken from William Clarke's pymapvbvd
+project (https://github.com/wexeee/pymapvbvd).
+"""
+
 
 def parse_twix_hdr(file):
     import re

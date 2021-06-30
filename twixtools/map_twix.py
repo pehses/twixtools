@@ -274,7 +274,7 @@ class twix_array():
                        'zf_missing_lines': False}
 
         # 'Ave' should be averaged by default, Idx indices should be ignored:
-        for dim in ['Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Ave']:
+        for dim in ['Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Seg', 'Ave']:
             self._flags['average'][dim] = True
 
         # set flags that were passed in constructor call

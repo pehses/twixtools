@@ -1,4 +1,10 @@
-from __future__ import print_function   # for python 2.7 compatibility
+"""
+twixtools: provides reading and limited writing capability of Siemens MRI raw
+           data files (.dat).
+
+@author: Philipp Ehses (philipp.ehses@dzne.de)
+"""
+
 import os
 import re
 import numpy as np
@@ -10,8 +16,31 @@ import twixtools.mdb
 import twixtools.hdr_def as hdr_def
 
 
-def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_scans=None):
-    """Function for reading siemens twix raw data files."""
+def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
+              include_scans=None):
+    """Function for reading siemens twix raw data files.
+
+    Parameters
+    ----------
+    infile : filename or measurement id of .dat file
+    read_prot : bool, optional
+        By default, the protocol information is read and parsed
+        (this is also highly recommended)
+    keep_syncdata_and_acqend : bool, optional
+        By default, syncdata and acqend blocks are included in the mdb list.
+        This is helpful for twix writing, but unnecessary otherwise.
+    include_scans: list of scan numbers or None, optional
+        By default, all scans in a multi-raid file are parsed.
+
+    Returns
+    -------
+    out: list of twix scan(s)
+        The twix scans themselves consist of a dict with these elements:
+            - hdr: dict of parsed ascconv and XProtocol header information
+            - hdr_str: header bytearray (used by write_twix)
+            - mdb: list of measurement data blocks -- here is the MRI data
+              use `help(twixtools.mdb.Mdb)` for more information
+    """
     if isinstance(infile, str):
         # assume that complete path is given
         if infile[-4:].lower() != '.dat':
@@ -20,7 +49,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
         # filename not a string, so assume that it is the MeasID
         measID = infile
         infile = [f for f in os.listdir('.') if re.search(
-            r'^meas_MID0*' + str(measID) + '.*\.dat$', f)]
+            r'^meas_MID0*' + str(measID) + r'.*\.dat$', f)]
         if len(infile) == 0:
             print('error: .dat file with measID', measID, 'not found')
             raise ValueError
@@ -41,8 +70,13 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
     if version_is_ve:
         print('Software version: VD/VE (!?)')
         fid.seek(0, os.SEEK_SET)  # move pos to 9th byte in file
-        raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader, count=1)[0]
-        out.append(raidfile_hdr)
+        raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader,
+                                   count=1)[0]
+        # WARNING:
+        # it is probably no longer necessary to append the raidfile_hdr for
+        # lossless twix writing (as long as there are no changes to the twix
+        # format!), so we don't need the following line
+        # out.append(raidfile_hdr)
         NScans = raidfile_hdr["hdr"]["count_"]
         measOffset = list()
         measLength = list()
@@ -62,7 +96,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
         if include_scans is not None and s not in include_scans:
             # skip scan if it is not requested
             continue
-            
+
         scanStart = measOffset[s]
         scanEnd = scanStart + measLength[s]
         pos = measOffset[s]
@@ -70,23 +104,24 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
         meas_init = np.fromfile(fid, dtype=hdr_def.SingleMeasInit, count=1)[0]
         hdr_len = meas_init["hdr_len"]
         out.append(dict())
+        out[-1]['mdb'] = list()
         if read_prot:
             fid.seek(pos, os.SEEK_SET)
             hdr = twixprot.parse_twix_hdr(fid)
-            out[-1]['init'] = meas_init
             out[-1]['hdr'] = hdr
             fid.seek(pos, os.SEEK_SET)
             out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
-            # prot = twixprot(fid, hdr_len, version_is_ve)
-            # out[-1]['prot'] = prot
-        out[-1]['mdb'] = list()
+
+        if version_is_ve:
+            out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
 
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos
         print('Scan ', s)
         helpers.update_progress(pos - scanStart, scanEnd - scanStart, True)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
-            helpers.update_progress(pos - scanStart, scanEnd - scanStart, False)
+            helpers.update_progress(
+                pos - scanStart, scanEnd - scanStart, False)
             fid.seek(pos, os.SEEK_SET)
             mdb = twixtools.mdb.Mdb(fid, version_is_ve)
 
@@ -104,23 +139,29 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True, include_sca
             if mdb.is_flag_set('ACQEND'):
                 break
 
-        print('')
+        print()
 
     fid.close()
 
     return out
 
 
-do_not_zfp_compress = ['SYNCDATA', 'ACQEND']
-do_not_remove_os = ['SYNCDATA', 'ACQEND', '__fidnav___']
-do_not_scc_compress = ['SYNCDATA', 'ACQEND', 'RTFEEDBACK']
-do_not_gcc_compress = ['SYNCDATA', 'ACQEND', 'RTFEEDBACK', 'NOISEADJSCAN', '__fidnav___']
-#'REFLECT'
-
 def write_twix(scanlist, outfile, version_is_ve=True):
-    
+    """Function for writing siemens twix raw data files.
+
+    Parameters
+    ----------
+    scanlist: list of twix scan(s)
+    outfile: output filename for twix file (.dat)
+    version_is_ve: bool that determines what whether to write a VA/VB
+        or VD/VE compatible twix file.
+        IMPORTANT: This tool does not allow for conversion between versions.
+        This bool should be set to the original twix file version!
+        IMPORTANT: `write_twix` currently only supports VE twix files!
+    """
+
     def write_sync_bytes(fid):
-        syncbytes = (512-(fid.tell())%512)%512
+        syncbytes = (512-(fid.tell()) % 512) % 512
         fid.write(b'\x00' * syncbytes)
 
     if isinstance(scanlist, dict):
@@ -130,11 +171,11 @@ def write_twix(scanlist, outfile, version_is_ve=True):
         if version_is_ve:
             # allocate space for multi-header
             fid.write(b'\x00' * 10240)
-        
+
         scan_pos = list()
         scan_len = list()
-        for key, scan in enumerate(scanlist):
-            
+        for scan in scanlist:
+
             if not isinstance(scan, dict):
                 continue
 
@@ -153,15 +194,16 @@ def write_twix(scanlist, outfile, version_is_ve=True):
                 mdb.mdh.tofile(fid)
                 data = np.atleast_2d(mdb.data)
                 if version_is_ve:
-                    if mdb.is_flag_set('SYNCDATA') or mdb.is_flag_set('ACQEND'):
+                    if mdb.is_flag_set('SYNCDATA')\
+                            or mdb.is_flag_set('ACQEND'):
                         data.tofile(fid)
                     else:
                         for c in range(data.shape[0]):
-                            #write channel header
+                            # write channel header
                             mdb.channel_hdr[c].tofile(fid)
                             # write data
                             data[c].tofile(fid)
-                else: # WIP: VB version
+                else:  # WIP: VB version
                     mdb.mdh.tofile(fid)
                     # write data
                     data[c].tofile(fid)
@@ -174,75 +216,84 @@ def write_twix(scanlist, outfile, version_is_ve=True):
 
         # now write preallocated MultiRaidFileHeader
         if version_is_ve:
-            n_scans = len(scan_pos)
-            if isinstance(scanlist[0], np.void):
-                # we have a template
-                multi_header = scanlist[0].copy()
-            else:
-                # start from scratch
-                multi_header = np.zeros(1, dtype=hdr_def.MultiRaidFileHeader)[0]
-                for _ in range(n_scans):
-                    multi_header['entry']['patName_'] = b'x'*45
-                    multi_header['entry']['protName_'] = b'noname'
-
-            # write NScans
-            multi_header['hdr']['count_'] = n_scans
-            # write scan_pos & scan_len for each scan
-            for i, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
-                multi_header['entry'][i]['len_'] = len_
-                multi_header['entry'][i]['off_'] = pos_
-                
+            multi_header = construct_multiheader(scanlist)
+            # write scan_pos & scan_len for each scan (in case they changed)
+            for key, (pos_, len_) in enumerate(zip(scan_pos, scan_len)):
+                multi_header['entry'][key]['len_'] = len_
+                multi_header['entry'][key]['off_'] = pos_
             # write MultiRaidFileHeader
             fid.seek(0)
             multi_header.tofile(fid)
 
-import copy
+
+def construct_multiheader(scanlist):
+    multi_header = np.zeros(1, dtype=hdr_def.MultiRaidFileHeader)[0]
+    n_scans = len(scanlist)
+    for key, scan in enumerate(scanlist):
+        if 'raidfile_hdr' in scan:
+            # we have a template
+            multi_header['entry'][key] = scan['raidfile_hdr'].copy()
+        else:  # not really necessary anymore, but may be helpful in future
+            # start from scratch
+            pat = b'x' * 20
+            prot = b'noname'
+            meas_id = np.uint32(0)
+            file_id = np.uint32(0)
+            if 'file_id' in scan:
+                file_id = scan['file_id']
+            if 'hdr' in scan and 'Config' in scan['hdr']:
+                config = scan['hdr']['Config']
+                if 'tPatientName' in config:
+                    pat = config['tPatientName'].encode()
+                    if all([item == 'x' for item in pat.decode()]):
+                        # fix number of 'x' for anonymized names (lucky? guess)
+                        pat = b'x' * min(64, len(pat)+9)
+                if 'SequenceDescription' in config:
+                    prot = config['SequenceDescription'].encode()
+                if 'SequenceDescription' in config:
+                    meas_id = np.uint32(config['MeasUID'])
+
+            multi_header['entry']['measId_'][key] = meas_id
+            multi_header['entry']['fileId_'][key] = file_id
+            multi_header['entry']['patName_'][key] = pat
+            multi_header['entry']['protName_'][key] = prot
+
+    # write NScans
+    multi_header['hdr']['count_'] = n_scans
+
+    return multi_header
 
 
-def fix_scancounters(mdb_list, start_cnt=0):
-    # ulScanCounters in mdb_list must be consecutive integers
-    for cnt, mdb in enumerate(mdb_list, start_cnt):
+def fix_scancounters(mdb_list, start_cnt=1):
+    ''' makes sure that all ulScanCounter in mdb_list are consecutive integers
+    This is necessary if mdbs are added/removed to/from a mdb_list.
+    '''
+    cnt = start_cnt
+    for mdb in mdb_list:
+        if mdb.is_flag_set('SYNCDATA'):  # ignore SYNCDATA
+            continue
         mdb.mdh['ulScanCounter'] = cnt
         for cha in mdb.channel_hdr:
             cha['ulScanCounter'] = cnt
+        cnt += 1
 
 
-class twix_array(dict):
-    # WIP: not ready yet
-    def __init__(self, mdb_list):
-        super(twix_array, self).__init__({key:list() for key in ['ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN', 'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60', 'PATREFSCAN', 'IMASCAN']})
-        self.mdb_list = copy.deepcopy(mdb_list)
-        self.sLC = dict()
-        self.mdb_shape = dict()
-        self.parse()
-        
+def del_from_mdb_list(mdb_list, function):
+    ''' helper function to safely remove multiple items from mdb_list at once
+    Parameters
+    ----------
+    mdb_list: input list of mdbs
+    function: function used to filter mdbs
 
-    def parse(self):
-        self.sLC = {key:list() for key in self.keys()}
-        self.mdb_shape = {key:list() for key in self.keys()}
-        for mdb in self.mdb_list:
-            if mdb.is_flag_set('ACQEND') or mdb.is_flag_set('SYNCDATA'):
-                continue
-            for cat in list(self.keys())[:-1]:
-                if mdb.is_flag_set(cat):
-                    self.get(cat).append(mdb)
-                    self.sLC[cat].append(mdb.mdh['sLC'])
-                    self.mdb_shape[cat].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
-            if mdb.is_image_scan():
-                self['IMASCAN'].append(mdb)
-                self.sLC['IMASCAN'].append(mdb.mdh['sLC'])
-                self.mdb_shape['IMASCAN'].append([mdb.mdh['ushUsedChannels'], mdb.mdh['ushSamplesInScan']])
-        
-        for cat in list(self.keys()):
-            if len(self.get(cat))==0:
-                # remove empty categories
-                del(self[cat])
-                del(self.sLC[cat])
-                del(self.mdb_shape[cat])
-            else:
-                # add category to self
-                pass
+    Example
+    --------
+    Remove all mdbs from mdb_list which have the flag 'noname60' set to True.
+    >>> del_from_mdb_list(mdb_list, lambda mdb: mdb.is_flag_set('noname60'))
+    '''
 
+    ind2remove = [key for key, mdb in enumerate(mdb_list) if function(mdb)]
 
-    # def __getitem__(self, index):
-    #     pass
+    for key in sorted(ind2remove, reverse=True):
+        del mdb_list[key]
+
+    return

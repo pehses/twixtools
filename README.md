@@ -1,10 +1,8 @@
 # twixtools
 
-## twix file reader (read_twix)
-
 ### Purpose
 
-twixtools provide reading and writing capability of Siemens MRI raw data files (.dat). In addition, it also includes the compression utility twixzip (see further below for a description).
+twixtools provide reading and limited writing capability of Siemens MRI raw data files (.dat). In addition, it also includes the compression utility twixzip (see further below for a description).
 
 
 ### Requirements
@@ -23,7 +21,12 @@ Navigate to the twixtools folder in an open terminal and install twixtools with 
 Installation through `python setup.py install` is currently not possible.
 
 
-### Brief Tutorial
+### Demo code
+
+A jupyter notebook that demonstrates the basic functionality of the  `read_twix`, `map_twix`, and `write_twix` tools can be found in `demo/recon_example.ipynb`.
+
+
+## read_twix: "low-level" access to twix data
 
 The raw data file can be parsed using the read_twix function:
 
@@ -35,9 +38,10 @@ multi_twix = twixtools.read_twix(filename)
 The function returns a list of individual measurements (of length >=1). The last measurement usually corresponds to the imaging scan, earlier measurements often include calibration data. Each measurement contains a python dict() with the following entries:
 
 * 'mdb': measurement data divided into blocks (return type: list)
-* 'hdr_str': dict of protocol header strings (divided into different protocol types)
-* 'hdr': dict of partially parsed protocol header strings (each dict element contains another dict with protocol information)
-* ('init': required for twix file writing, otherwise of little importance)
+* 'hdr': dict of parsed protocol header strings (each dict element contains another dict with protocol information)
+* 'hdr_str': dict of original protocol header strings (divided into different protocol types)
+  - note that this is the protocol information that is used for twix file writing (by `write_twix`), so make sure to make necessary adjustments here and not in ['hdr']
+* ('raidfile_hdr': required for twix file writing, otherwise of little importance)
 
 
 Each invididual 'mdb' in the list of mdbs consists of a data and a header (line counters and such) part, which can be accessed as follows:
@@ -98,6 +102,19 @@ def import_kspace(mdb_list)
     return out  # 4D numpy array [n_part, n_line, n_channel, n_column]
 ```
 
+## map_twix: "high level" access to twix data
+`map_twix` is a high-level function that takes the data obtained from `read_twix` (in the form of `Mdb` objects), and maps it to multi-dimensional "k-space" arrays. These `twix_array` objects are generated for different data types (image/noise adjust/phase-correction/... scan) and can be accessed with `numpy.ndarray` array-slicing syntax.
+
+
+Optional flags control additional feature and also have an impact on size and shape of the multidimensional arrays. The following flags are currently available (stored in the `flags` dict within each `twix_array` object):
+  * `average`: dict of bools that determines which dimensions should be averaged.
+  * `squeeze_ave_dims`: bool that determines whether averaged dimensions should be removed/squeezed from the array's shape.
+  * `remove_os`: oversampling removal. Reduces the number of columns by a factor of two.
+  * `regrid`: bool that controls ramp-sampling regridding (if applicable)
+  * `skip_empty_lead`: skips to first line & partition that is found in mdb list (e.g. if first line counter is 10, the output array starts at line counter 10).
+  * `zf_missing_lines`: zero-fill k-space to include lines and partitions that are higher than the maximum counter found in the mdb list, but are still within the k-space matrix according to the twix header.
+
+For example code, please look at the `demo/recon_example.ipynb` jupyter file.
 
 ## twixzip Compression Utility
 
@@ -155,3 +172,8 @@ Compression methods can be selected via:
 The optional argument `--testmode` can be used to automatically decompress the data after compression. The created decompressed MRI raw data filename contains the selected compression method. The option `--profile` can be used to profile the compression code.
 
 [1] BART Toolbox for Computational Magnetic Resonance Imaging, DOI: 10.5281/zenodo.592960
+
+
+## Acknowledgements
+
+The protocol header parsing code originates from William Clarke's excellent pymapvbvd project (https://github.com/wexeee/pymapvbvd).

@@ -23,6 +23,7 @@ class ObservableDict(dict):
         else:
             dict.__setitem__(self, key, value)
 
+
 def idea_version_check(f):
     prev_pos = f.tell()
     f.seek(0)

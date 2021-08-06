@@ -194,11 +194,8 @@ class twix_array():
             be averaged.
         - 'squeeze_ave_dims': bool that determines whether averaged
             dimensions should be removed/squeezed from the array's shape.
-<<<<<<< HEAD
-=======
         - 'squeeze_singletons': bool that determines whether singleton
             dimensions should be removed ('True' makes previous option irrelevant)
->>>>>>> master
         - 'remove_os': oversampling removal. Reduces the number of columns
             by a factor of two.
         - 'regrid': bool that controls ramp-sampling regridding (if applicable)
@@ -449,15 +446,15 @@ class twix_array():
         out = np.zeros(target_sz, dtype='complex64')
         # make sure that cha & col dim exist
         if self.flags['squeeze_singletons']:
-            if self.size['Cha'] == 1:
-                out = out[..., np.newaxis]
             if self.size['Col'] == 1:
                 out = out[..., np.newaxis]
+            if self.size['Cha'] == 1:
+                out = out[..., np.newaxis, :]
         elif self.flags['squeeze_ave_dims']:
-            if average_cha:
-                out = out[..., np.newaxis]
             if average_col:
                 out = out[..., np.newaxis]
+            if average_cha:
+                out = out[..., np.newaxis, :]
 
         # 'vectorize' the output array for now
         out = out.reshape([-1, out.shape[-2], out.shape[-1]])

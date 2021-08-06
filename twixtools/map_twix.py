@@ -81,7 +81,7 @@ def map_twix(input):
     >>> im_array.flags['remove_os'] = True  # activate automatic os removal
     >>> im_array.flags['regrid'] = True  # activate ramp sampling regridding
     >>> im_array.flags['average']['Rep'] = True  # average all repetitions
-    >>> im_array.flags['squeeze_ave_dims'] = True  # reduces the dimensionality
+    >>> im_array.flags['squeeze_singletons'] = True  # squeezes singleton dims
 
     Print all available flags and their values:
     >>> print(im_array.flags)
@@ -152,10 +152,6 @@ def map_twix(input):
             out[-1][category] = twix_array(out[-1][category],
                                            meas['hdr'].copy())
 
-        # set few default flag(s) for 'image' category
-        if 'image' in out[-1]:
-            out[-1]['image'].flags['zf_missing_lines'] = True
-
         # include hdr in dict
         out[-1]['hdr'] = meas['hdr'].copy()
         out[-1]['hdr_str'] = meas['hdr_str'].copy()
@@ -198,6 +194,11 @@ class twix_array():
             be averaged.
         - 'squeeze_ave_dims': bool that determines whether averaged
             dimensions should be removed/squeezed from the array's shape.
+<<<<<<< HEAD
+=======
+        - 'squeeze_singletons': bool that determines whether singleton
+            dimensions should be removed ('True' makes previous option irrelevant)
+>>>>>>> master
         - 'remove_os': oversampling removal. Reduces the number of columns
             by a factor of two.
         - 'regrid': bool that controls ramp-sampling regridding (if applicable)
@@ -270,6 +271,7 @@ class twix_array():
                        'remove_os': False,
                        'regrid': False,
                        'squeeze_ave_dims': False,
+                       'squeeze_singletons': False,
                        'skip_empty_lead': False,
                        'zf_missing_lines': False}
 
@@ -298,10 +300,12 @@ class twix_array():
 
     @property
     def dims(self):
-        if not self.flags['squeeze_ave_dims']:
-            return self.dim_order
+        if self.flags['squeeze_singletons']:
+            return [name for name in self.dim_order if self.size[name] > 1]
+        elif self.flags['squeeze_ave_dims']:
+            return [name for name in self.dim_order if not self.flags['average'][name]]
         else:
-            return [n for n in self.dim_order if not self.flags['average'][n]]
+            return self.dim_order
 
     @property
     def non_singleton_dims(self):
@@ -321,7 +325,7 @@ class twix_array():
     def size(self):
         # self.size returns the shape of the data as a dtype with named
         # elements for easier access
-        # averaged dims will be kept even if 'squeeze_ave_dims' is set to True
+        # averaged dims will be kept even if one of the 'squeeze' options is set
         sz = self.base_size.copy()
         if not self.flags['average']['Col'] and self.flags['remove_os']:
             sz[self.dim_order.index('Col')] //= 2
@@ -351,12 +355,17 @@ class twix_array():
     def shape(self):
         # self.shape is the more numpy compatible version of self.size by
         # returning a tuple
+        # 'squeeze_singletons': singleton dimensions are removed from shape
         # 'squeeze_ave_dims': averaged dims are removed from shape
-        if not self.flags['squeeze_ave_dims']:
-            return self.size.item()
-        else:
+        if self.flags['squeeze_singletons']:
+            return [sz for sz, name in zip(self.size.item(),
+                    self.size.dtype.names) if self.size[name] > 1]
+        elif self.flags['squeeze_ave_dims']:
             return [sz for sz, name in zip(self.size.item(),
                     self.size.dtype.names) if not self.flags['average'][name]]
+        else:
+            return self.size.item()
+
 
     def __getitem__(self, index):
         # implement array slicing here
@@ -439,7 +448,12 @@ class twix_array():
 
         out = np.zeros(target_sz, dtype='complex64')
         # make sure that cha & col dim exist
-        if self.flags['squeeze_ave_dims']:
+        if self.flags['squeeze_singletons']:
+            if self.size['Cha'] == 1:
+                out = out[..., np.newaxis]
+            if self.size['Col'] == 1:
+                out = out[..., np.newaxis]
+        elif self.flags['squeeze_ave_dims']:
             if average_cha:
                 out = out[..., np.newaxis]
             if average_col:

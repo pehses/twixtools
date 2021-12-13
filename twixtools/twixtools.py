@@ -17,7 +17,7 @@ import twixtools.hdr_def as hdr_def
 
 
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
-              include_scans=None):
+              include_scans=None, parse_data=True):
     """Function for reading siemens twix raw data files.
 
     Parameters
@@ -114,6 +114,10 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
 
         if version_is_ve:
             out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
+
+        # if data is not requested (headers only)
+        if not parse_data:
+            continue
 
         pos = measOffset[s] + np.uint64(hdr_len)
         scanStart = pos

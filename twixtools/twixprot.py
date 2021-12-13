@@ -122,6 +122,11 @@ def parse_xprot(buffer):
     tokensDouble = re.finditer(
         r'<ParamDouble\."(\w+)">\s*{\s*(<Precision>\s*[0-9]*)?\s*([^}]*)',
         buffer)
+    # tokensArray = re.finditer(
+    #     r'<ParamArray\."(\w+)">\s+{\s+<Visible>.\"(true|false)\"\s+<MinSize>.(\d+)\s+<MaxSize>.(\d+)\s+<Default>.<(\w+).\"(\w*)\">',
+    #     buffer)
+    # for t in tokensArray:
+    #     print(t.groups())
     alltokens = chain(tokens, tokensDouble)
 
     for t in alltokens:

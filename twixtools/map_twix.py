@@ -267,10 +267,13 @@ class twix_array():
         self._flags = {'average': {item: False for item in self.dim_order},
                        'remove_os': False,
                        'regrid': False,
+                       'apply_fftscale': False,
+                       'apply_rawdatacorr': False,
                        'squeeze_ave_dims': False,
                        'squeeze_singletons': False,
                        'skip_empty_lead': False,
-                       'zf_missing_lines': False}
+                       'zf_missing_lines': False,
+                       'user_func': list()}
 
         # 'Ave' should be averaged by default, Idx indices should be ignored:
         for dim in ['Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Seg', 'Ave']:
@@ -283,6 +286,16 @@ class twix_array():
                     self.flags[key] = item.copy()
                 except Exception:
                     self.flags[key] = item
+
+        # initialize fftscale and raw data correction factors
+        # todo: import them from the protocol ("Meas"->"CoilSelectInfo")
+        self.fft_scale = np.ones(self.base_size['Cha'])
+        self.rawdata_corrfactors = np.ones(self.base_size['Cha'], complex)
+
+        # determine k-space center position from first mdb
+        self.kspace_center_col = mdb.mdh['ushKSpaceCentreColumn']
+        self.kspace_center_lin = mdb.mdh['ushKSpaceCentreLineNo']
+        self.kspace_center_par = mdb.mdh['ushKSpaceCentrePartitionNo']
 
     def copy(self):
         return self.__copy__()
@@ -319,6 +332,20 @@ class twix_array():
         return self._flags
 
     @property
+    def lin_offset(self):
+        offset = 0
+        if self.hdr is not None and self.flags['zf_missing_lines'] and self.base_size['Lin']//2 > self.kspace_center_lin + 1:
+            offset = self.base_size['Lin'] - 2 * self.kspace_center_lin
+        return offset
+
+    @property
+    def par_offset(self):
+        offset = 0
+        if self.hdr is not None and self.flags['zf_missing_lines'] and self.base_size['Par']//2 > self.kspace_center_lin + 1:
+            offset = self.base_size['Par'] - 2 * self.kspace_center_par
+        return offset
+
+    @property
     def size(self):
         # self.size returns the shape of the data as a dtype with named
         # elements for easier access
@@ -332,6 +359,7 @@ class twix_array():
                 hdr_lin = \
                     self.hdr['MeasYaps']['sKSpace']['lPhaseEncodingLines']
                 sz['Lin'] = max(sz['Lin'], hdr_lin)
+                    
             if not self.flags['average']['Par']\
                     and self.hdr['MeasYaps']['sKSpace']['ucDimension'] > 2:
                 hdr_par = self.hdr['MeasYaps']['sKSpace']['lPartitions']
@@ -363,6 +391,41 @@ class twix_array():
         else:
             return self.size.item()
 
+    def setCoilInfoTo(self, coilname, activate_flags=True):
+        # if activate_flags and not self.flags['apply_fftscale']:
+        #     print('setting flag "apply_fftscale" to True')
+        #     self.flags['apply_fftscale'] = True
+        if activate_flags and not self.flags['apply_rawdatacorr']:
+            print('setting flag "apply_rawdatacorr" to True')
+            self.flags['apply_rawdatacorr'] = True
+
+        if coilname is None or coilname.lower() == 'none':
+            self.fft_scale = np.ones(self.base_size['Cha'])
+            self.rawdata_corrfactors = np.ones(self.base_size['Cha'], complex)
+            return
+
+        if coilname.lower() == 'nova_ptx':
+            self.fft_scale = np.array([
+                1.024957, 0.960428, 0.991236, 1.037026, 1.071855, 1.017678,
+                1.02946 , 1.026439, 1.083618, 1.124822, 1.169501, 1.148701,
+                1.220159, 1.211465, 1.212671, 1.160536, 1.072906, 1.049849,
+                1.046032, 1.018297, 1.024308, 0.975085, 0.977127, 0.975455,
+                0.966018, 0.945748, 0.943535, 0.964435, 1.009673, 0.9225  ,
+                0.962792, 0.935691])
+            self.rawdata_corrfactors = np.array([
+                -7.869929+3.80047j , -7.727324+4.071778j, -7.88741 +3.761298j,
+                -7.746147+4.034059j, -7.905413+3.721748j, -7.681937+3.962719j,
+                -7.869919+3.756741j, -7.708525+3.898736j, -7.344962+4.680127j,
+                -7.219433+4.857659j, -7.362616+4.62574j , -7.207232+4.834069j,
+                -7.335363+4.60201j , -7.103662+4.94855j , -7.339441+4.680904j,
+                -7.114415+4.918804j, -7.366599+4.685465j, -7.150412+4.849619j,
+                -7.338072+4.695826j, -7.179264+4.87732j , -7.334629+4.790239j,
+                -7.097607+4.900652j, -7.325254+4.716376j, -7.147962+4.788579j,
+                -7.354259+4.671206j, -7.1664  +4.843273j, -7.292011+4.672282j,
+                -7.171817+4.863891j, -7.357615+4.663175j, -7.049273+4.926576j,
+                -7.300245+4.660961j, -6.767411+4.967862j])
+        else:
+            raise IndexError("coilname not known")
 
     def __getitem__(self, index):
         # implement array slicing here
@@ -462,6 +525,14 @@ class twix_array():
         # average counter to scale the data properly later
         ave_counter = np.zeros(np.prod(out.shape[:-2]), dtype=np.uint16)
 
+        fft_scale = 1
+        if self.flags['apply_fftscale'] and not all(self.fft_scale==1):
+            corr_factor = self.fft_scale[:, np.newaxis]
+        
+        rawdata_corrfactor = 1
+        if self.flags['apply_rawdatacorr'] and not all(self.rawdata_corrfactors==1):
+            rawdata_corrfactor = self.rawdata_corrfactors[:, np.newaxis]
+
         # now that we have our selection, we can read the data
         # for this, we simply go through all mdb's and fill them in if selected
         # this is not very efficient for large files, but fool-proof
@@ -476,6 +547,9 @@ class twix_array():
             if skip_empty_lead:
                 sLC[sLC_lpos] -= self._first_ix[lpos]
                 sLC[sLC_ppos] -= self._first_ix[ppos]
+            else:
+                sLC['ushLine'] += self.lin_offset
+                sLC['ushPartition'] += self.par_offset
 
             counters = sLC[sLC_sel]
 
@@ -500,7 +574,10 @@ class twix_array():
                 continue
 
             # read data
-            data = mdb.data
+            data = fft_scale * mdb.data
+
+            if mdb.is_flag_set('RAWDATACORRECTION'):
+                data *= rawdata_corrfactor
 
             # average cha if requested
             if average_cha:
@@ -521,6 +598,16 @@ class twix_array():
             # reflect data if mdh flag is set
             if mdb.is_flag_set('REFLECT'):
                 data = data[..., ::-1]
+
+            # user-defined function(s) to apply to data
+            # the function needs to be defined like this:
+            #   def example_func(data, mdh, args):
+            #       [...]
+            #       return data
+            # and stored as a list of lists with
+            # [[func, args],...] in ['user_func']
+            for item in self.flags['user_func']:
+                data = item[0](data, mdb.mdh, item[1])
 
             ix = [int(0)]
             for key in range(mdh_ndim):

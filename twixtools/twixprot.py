@@ -28,6 +28,7 @@ def parse_twix_hdr(file):
         file.seek(pos)
         buf = file.read(buf_len).decode('latin1')
         xprotocol[name] = parse_buffer(buf)
+        xprotocol["{}_raw".format(name)] = buf
         pos += buf_len
 
     return xprotocol

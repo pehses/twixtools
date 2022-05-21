@@ -53,7 +53,7 @@ dim_map = {
     'Col':'READ_DIM'
 }
 
-def read_to_cfl(twixmap, data_type, remove_os):
+def read_to_cfl(twixmap, data_type, remove_os, no_average):
     if data_type.lower() == 'noise':
         # noise data is treated differently:
         #   -- concatenate all noise ADC into one column
@@ -72,7 +72,9 @@ def read_to_cfl(twixmap, data_type, remove_os):
         sig = sig.reshape(sz)
     else:
         twixmap.flags['remove_os'] = remove_os
-        twixmap.flags['average']['Seg'] = True
+        twixmap.flags['average']['Seg'] = not no_average
+        if no_average:
+            twixmap.flags['average']['Ave'] = False
         if data_type.lower() == 'image':
             # image data is zero-filled to the correct matrix size
             twixmap.flags['zf_missing_lines'] = True
@@ -84,7 +86,7 @@ def read_to_cfl(twixmap, data_type, remove_os):
     return np.moveaxis(sig, np.arange(twixmap.ndim), [cfl_order.index(v) for v in dim_map.values()])
 
 
-def convert_to_cfl(twix_filename, out_filename, meas_no, data_type, remove_os, apply_rawdatacorr):
+def convert_to_cfl(twix_filename, out_filename, meas_no, data_type, remove_os, apply_rawdatacorr, no_average):
     
     print('\n ---- Parsing twix file ----\n')
     t_parse_start = time.time()
@@ -105,11 +107,11 @@ def convert_to_cfl(twix_filename, out_filename, meas_no, data_type, remove_os, a
             if isinstance(twixmap[item], twixtools.twix_array):
                 fname = out_filename + '_' + item
                 print('\n --- Now reading %s data and writing to cfl file %s ---'%(item, fname))
-                sig = read_to_cfl(twixmap[item], item, remove_os)
+                sig = read_to_cfl(twixmap[item], item, remove_os, no_average)
                 cfl.writecfl(fname, sig)
     else:
         print('\n --- Now reading %s data and writing to cfl file %s ---'%(data_type, out_filename))
-        sig = read_to_cfl(twixmap[data_type], data_type, remove_os)
+        sig = read_to_cfl(twixmap[data_type], data_type, remove_os, no_average)
         cfl.writecfl(out_filename, sig)
     t_convert_stop = time.time()
     t = t_convert_stop - t_parse_start
@@ -124,6 +126,7 @@ if __name__ == "__main__":
     parser.add_argument('--meas_no', type=int, default=-1, help='measurement number in case of multi-raid file (default: -1)')
     parser.add_argument('--remove_os', action='store_true', help='remove oversampling (factor 2)')
     parser.add_argument('--rawdatacorr', action='store_true', help='apply rawdata correction factors (wip)')
+    parser.add_argument('--no-average', dest='no_average', action='store_true', help='Don\'t do averaging along BATCH or AVG Dimension.')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--type', dest='data_type', type=str, default='image', help='raw data type (default: image)')
     group.add_argument('--read_all', action='store_true', help='reads all known data types, outfile name is used as prefix')
@@ -132,4 +135,4 @@ if __name__ == "__main__":
     if args.read_all:
         args.data_type = 'all'
 
-    convert_to_cfl(args.infile, args.outfile, args.meas_no, args.data_type, args.remove_os, args.rawdatacorr)
+    convert_to_cfl(args.infile, args.outfile, args.meas_no, args.data_type, args.remove_os, args.rawdatacorr, args.no_average)

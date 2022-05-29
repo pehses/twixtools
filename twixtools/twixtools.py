@@ -31,6 +31,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         This is helpful for twix writing, but unnecessary otherwise.
     include_scans: list of scan numbers or None, optional
         By default, all scans in a multi-raid file are parsed.
+    parse_data: bool, optional
+        Set to False to parse only protocol information.
 
     Returns
     -------

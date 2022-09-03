@@ -1,21 +1,5 @@
 #!/usr/bin/python
-"""Extract information to convert between
-Patient Coordinate System (PCS; Sag/Cor/Tra), Device Coordinate System (XYZ) and Gradient Coordinate System (GCS or PRS; Phase,Readout,Slice).
-Example:
-- x is a vector given in PRS-coordinates.
-- prs_to_pcs() @ x = x in PCS coordinates.
-
-Based on work by Christian Mirkes and Ali Aghaeifar.
-"""
-
-
-import argparse
-import json
-
 import numpy as np
-
-import twixtools
-
 
 internal_os = 2
 pcs_directions = ["dSag", "dCor", "dTra"]
@@ -28,142 +12,132 @@ pcs_transformations = {
 }
 
 
-def rps_to_prs():
-    return np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
+class Geometry:
+    """Get geometric information from twix dict
 
+    During initialization, information about slice geometry is copied from the supplied twix dict.
+    Methods for conversion between the different coordinate systems
+    Patient Coordinate System (PCS; Sag/Cor/Tra), Device Coordinate System (XYZ) and Gradient Coordinate System (GCS or PRS; Phase,Readout,Slice)
+    are implemented (so far only rotation, i.e. won't work for offcenter measurementes).
 
-def get_plane_orientation(geometry):
-    if not abs(1 - np.linalg.norm(geometry["normal"])) < 0.001:
-        raise RuntimeError(f"Normal vector is not normal: |x| = {norm}")
+    Examples
+    ----------
+    ```
+    twix = twixtools.read_twix('meas.dat')
+    g = twixtools.Geometry(twix[-1])
+    y = geometry.rps_to_xyz() @ x
+    ```
 
-    maindir = np.argmax(np.abs(geometry["normal"]))
-    if 0 == maindir:
-        mat = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]  # @ mat // inplane mat
-    if 1 == maindir:
-        mat = [[0, 1, 0], [0, 0, 1], [1, 0, 0]]
-    if 2 == maindir:
-        mat = np.eye(3)
+    Based on work from Christian Mirkes and Ali Aghaeifar.
+    """
 
-    init_normal = np.zeros(3)
-    init_normal[maindir] = 1
+    def __init__(self, twix):
+        self.from_twix(twix)
 
-    v = np.cross(init_normal, geometry["normal"])
-    s = np.linalg.norm(v)
-    c = np.dot(init_normal, geometry["normal"])
+    def from_twix(self, twix):
+        if twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 2:
+            self.dims = 2
+        elif twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 4:
+            self.dims = 3
+        else:
+            self.dims = None
 
-    if s <= 0.00001:
-        mat = np.eye(3) * c @ mat
-    else:
-        V = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-        mat = (np.eye(3) + V + V * V * (1 - c) / s ** 2) @ mat
+        if len(twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"]) > 1:
+            print("WARNING more than one slice. Taking first one..")
 
-    return mat
+        self.fov = [
+            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dReadoutFOV"]
+            * internal_os,
+            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dPhaseFOV"],
+            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dThickness"],
+        ]
 
+        self.resolution = [
+            twix["hdr"]["MeasYaps"]["sKSpace"]["lBaseResolution"] * internal_os,
+            twix["hdr"]["MeasYaps"]["sKSpace"]["lPhaseEncodingLines"],
+            twix["hdr"]["MeasYaps"]["sKSpace"]["lPartitions"] if self.dims == 3 else 1,
+        ]
 
-def get_inplane_rotation(geometry):
-    mat = [
-        [-np.sin(geometry["angle"]), np.cos(geometry["angle"]), 0],
-        [-np.cos(geometry["angle"]), -np.sin(geometry["angle"]), 0],
-        [0, 0, 1],
-    ]
-    return np.array(mat)
+        self.voxelsize = list(np.array(self.fov) / np.array(self.resolution))
 
+        self.normal = [0, 0, 0]
+        if "sNormal" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]:
+            for i, d in enumerate(pcs_directions):
+                self.normal[i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0][
+                    "sNormal"
+                ].get(d, self.normal[i])
 
-def prs_to_pcs(geometry):
-    mat = get_inplane_rotation(geometry)
-    mat = get_plane_orientation(geometry) @ mat
-    return mat
+        self.offset = [0, 0, 0]
+        if "sPosition" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]:
+            for i, d in enumerate(pcs_directions):
+                self.offset[i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0][
+                    "sPosition"
+                ].get(d, self.offset[i])
 
+        self.angle = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0].get(
+            "dInPlaneRot", 0
+        )
 
-def pcs_to_xyz(g):
-    if g["patient_position"] in pcs_transformations:
-        return np.array(pcs_transformations[g["patient_position"]])
-    else:
-        raise RuntimeError(f"Unknown patient position: {g['patient_position']}")
+        if "tPatientPosition" in twix["hdr"]["Meas"]:
+            self.patient_position = twix["hdr"]["Meas"].get("tPatientPosition")
+        elif "sPatPosition" in twix["hdr"]["Meas"]:
+            self.patient_position = twix["hdr"]["Meas"].get("sPatPosition")
+        else:
+            self.patient_position = None
 
+        self.matrix = self.rps_to_xyz().tolist()
 
-def prs_to_xyz(g):
-    return pcs_to_xyz(g) @ prs_to_pcs(g)
+    def get_plane_orientation(self):
+        if not abs(1 - np.linalg.norm(self.normal)) < 0.001:
+            raise RuntimeError(f"Normal vector is not normal: |x| = {norm}")
 
+        maindir = np.argmax(np.abs(self.normal))
+        if 0 == maindir:
+            mat = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]  # @ mat // inplane mat
+        if 1 == maindir:
+            mat = [[0, 1, 0], [0, 0, 1], [1, 0, 0]]
+        if 2 == maindir:
+            mat = np.eye(3)
 
-def rps_to_xyz(g):
-    return prs_to_xyz(g) @ rps_to_prs()
+        init_normal = np.zeros(3)
+        init_normal[maindir] = 1
 
+        v = np.cross(init_normal, self.normal)
+        s = np.linalg.norm(v)
+        c = np.dot(init_normal, self.normal)
 
-def get_geometry(twix):
-    geometry = {}
+        if s <= 0.00001:
+            mat = np.eye(3) * c @ mat
+        else:
+            V = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+            mat = (np.eye(3) + V + V * V * (1 - c) / s ** 2) @ mat
 
-    if twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 2:
-        geometry["dims"] = 2
-    elif twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 4:
-        geometry["dims"] = 3
-    else:
-        geometry["dims"] = None
+        return mat
 
-    if len(twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"]) > 1:
-        print("WARNING more than one slice. Taking first one..")
+    def get_inplane_rotation(self):
+        mat = [
+            [-np.sin(self.angle), np.cos(self.angle), 0],
+            [-np.cos(self.angle), -np.sin(self.angle), 0],
+            [0, 0, 1],
+        ]
+        return np.array(mat)
 
-    geometry["fov"] = [
-        twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dReadoutFOV"]
-        * internal_os,
-        twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dPhaseFOV"],
-        twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dThickness"],
-    ]
+    def prs_to_pcs(self):
+        mat = self.get_inplane_rotation()
+        mat = self.get_plane_orientation() @ mat
+        return mat
 
-    geometry["resolution"] = [
-        twix["hdr"]["MeasYaps"]["sKSpace"]["lBaseResolution"] * internal_os,
-        twix["hdr"]["MeasYaps"]["sKSpace"]["lPhaseEncodingLines"],
-        twix["hdr"]["MeasYaps"]["sKSpace"]["lPartitions"]
-        if geometry["dims"] == 3
-        else 1,
-    ]
+    def pcs_to_xyz(self):
+        if self.patient_position in pcs_transformations:
+            return np.array(pcs_transformations[self.patient_position])
+        else:
+            raise RuntimeError(f"Unknown patient position: {self.patient_position}")
 
-    geometry["voxelsize"] = list(
-        np.array(geometry["fov"]) / np.array(geometry["resolution"])
-    )
+    def prs_to_xyz(self):
+        return self.pcs_to_xyz() @ self.prs_to_pcs()
 
-    geometry["normal"] = [0, 0, 0]
-    if "sNormal" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]:
-        for i, d in enumerate(pcs_directions):
-            geometry["normal"][i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][
-                0
-            ]["sNormal"].get(d, geometry["normal"][i])
+    def rps_to_xyz(self):
+        return self.prs_to_xyz() @ self.rps_to_prs()
 
-    geometry["offset"] = [0, 0, 0]
-    if "sPosition" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]:
-        for i, d in enumerate(pcs_directions):
-            geometry["offset"][i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][
-                0
-            ]["sPosition"].get(d, geometry["offset"][i])
-
-    geometry["angle"] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0].get(
-        "dInPlaneRot", 0
-    )
-
-    if "tPatientPosition" in twix["hdr"]["Meas"]:
-        geometry["patient_position"] = twix["hdr"]["Meas"].get("tPatientPosition")
-    elif "sPatPosition" in twix["hdr"]["Meas"]:
-        geometry["patient_position"] = twix["hdr"]["Meas"].get("sPatPosition")
-    else:
-        geometry["patient_position"] = None
-
-    geometry["matrix"] = rps_to_xyz(geometry).tolist()
-
-    return geometry
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("raw", help="Raw data file")
-    parser.add_argument(
-        "outfile", nargs="?", default="-", help=".json file to store the output"
-    )
-    args = parser.parse_args()
-
-    twix = twixtools.read_twix(args.raw, parse_data=False)
-    geometry = get_geometry(twix[-1])
-    if args.outfile == "-":
-        print(json.dumps(geometry, indent=4, sort_keys=True))
-    else:
-        with open(args.outfile, "w") as f:
-            json.dump(geometry, f)
+    def rps_to_prs(self):
+        return np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])

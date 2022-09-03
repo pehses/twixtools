@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import numpy as np
 
 
@@ -91,44 +91,31 @@ def _augment_matrix_dims(a, N):
     return e
 
 
-def create_transform_file(transform, raw):
-    import twixtools
-    from twixtools import geometry
-
-    twix = twixtools.read_twix(raw, parse_data=False)
-    g = geometry.get_geometry(twix[-1])
-
-    with open(transform, "w") as f:
-        json.dump(g, f, indent=4)
-
-
-def apply_transform_file(transform, infile, outfile):
+def main(rawname, inname, outname):
     from twixtools.contrib import cfl
+    import twixtools
 
-    data = cfl.readcfl(infile)
-    with open(transform, "r") as f:
-        g = json.load(f)
+    twix = twixtools.read_twix(rawname, parse_data=False, parse_geometry=True)
+    g = twix[-1]["geometry"].__dict__
+    data = cfl.readcfl(inname)
 
     data = apply_transform(g, data)
-    cfl.writecfl(outfile, data)
+    cfl.writecfl(outname, data)
 
 
 if __name__ == "__main__":
     import argparse
-    import json
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("transform", help="JSON File for transformation")
-    parser.add_argument(
-        "infile",
-        help="Either .dat file - then JSON File for transformation will be created -  or cfl input file to be transformed",
+    parser = argparse.ArgumentParser(
+        description="Read geometry information from raw .dat file to\
+   rotate a 3D image cfl (readout, phase, slice) to physical coordinates (x,y,z)"
     )
+    parser.add_argument("raw", help=".dat file")
     parser.add_argument(
-        "outfile", nargs="?", default=None, help="Transformed output (optional)"
+        "img",
+        help="cfl input file to be transformed",
     )
+    parser.add_argument("transformed_img", help="Transformed output")
     args = parser.parse_args()
 
-    if args.outfile:
-        apply_transform_file(args.transform, args.infile, args.outfile)
-    else:
-        create_transform_file(args.transform, args.infile)
+    main(args.raw, args.img, args.transformed_img)

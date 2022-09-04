@@ -23,9 +23,10 @@ class Geometry:
     Examples
     ----------
     ```
-    twix = twixtools.read_twix('meas.dat')
-    g = twixtools.Geometry(twix[-1])
-    y = geometry.rps_to_xyz() @ x
+    import twixtools
+    twix = twixtools.read_twix('meas.dat', parse_geometry=True, parse_data=False)
+    x = [1,1,1]
+    y = twix[-1]['geometry'].rps_to_xyz() @ x
     ```
 
     Based on work from Christian Mirkes and Ali Aghaeifar.

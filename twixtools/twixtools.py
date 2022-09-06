@@ -17,7 +17,7 @@ import twixtools.hdr_def as hdr_def
 import twixtools.geometry
 
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
-              include_scans=None, parse_data=True, parse_geometry=False):
+              include_scans=None, parse_data=True, parse_geometry=True):
     """Function for reading siemens twix raw data files.
 
     Parameters
@@ -34,8 +34,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
     parse_data: bool, optional
         Set to False to parse only protocol information.
     parse_geometry: bool, optional
-        Set to True to create transformation matrix from data coordinates to
-        physical coordinates.
+        Set to False to skip creation of transformation matrix from data
+        coordinates to physical coordinates.
 
     Returns
     -------

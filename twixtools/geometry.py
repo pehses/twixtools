@@ -35,6 +35,15 @@ class Geometry:
     def __init__(self, twix):
         self.from_twix(twix)
 
+    def __str__(self):
+        return ("Geometry:\n"
+                f"  inplane_rot: {self.inplane_rot}\n"
+                f"  normal: {self.normal}\n"
+                f"  offset: {self.offset}\n"
+                f"  patient_position: {self.patient_position}\n"
+                f"  rotmatrix: {self.rotmatrix}\n"
+                f"  voxelsize: {self.voxelsize}")
+
     def from_twix(self, twix):
         if twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 2:
             self.dims = 2
@@ -75,7 +84,7 @@ class Geometry:
                     "sPosition"
                 ].get(d, self.offset[i])
 
-        self.angle = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0].get(
+        self.inplane_rot = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0].get(
             "dInPlaneRot", 0
         )
 
@@ -86,10 +95,11 @@ class Geometry:
         else:
             self.patient_position = None
 
-        self.matrix = self.rps_to_xyz().tolist()
+        self.rotmatrix = self.rps_to_xyz().tolist()
 
     def get_plane_orientation(self):
-        if not abs(1 - np.linalg.norm(self.normal)) < 0.001:
+        norm = np.linalg.norm(self.normal)
+        if not abs(1 - norm) < 0.001:
             raise RuntimeError(f"Normal vector is not normal: |x| = {norm}")
 
         maindir = np.argmax(np.abs(self.normal))
@@ -117,8 +127,8 @@ class Geometry:
 
     def get_inplane_rotation(self):
         mat = [
-            [-np.sin(self.angle), np.cos(self.angle), 0],
-            [-np.cos(self.angle), -np.sin(self.angle), 0],
+            [-np.sin(self.inplane_rot), np.cos(self.inplane_rot), 0],
+            [-np.cos(self.inplane_rot), -np.sin(self.inplane_rot), 0],
             [0, 0, 1],
         ]
         return np.array(mat)

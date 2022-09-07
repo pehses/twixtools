@@ -19,7 +19,7 @@ setup(name='twixtools',
       url='https://github.com/pehses/twixtools/',
       license='MIT License',
       packages=['twixtools','twixtools/contrib'],
-      scripts=['twixtools/twixzip.py','utils/convert_to_cfl.py'],
+      scripts=['twixtools/twixzip.py','utils/convert_to_cfl.py', 'utils/rotate_3Dcfl.py'],
       zip_safe=False,
       test_suite="test",
       )

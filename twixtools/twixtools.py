@@ -14,10 +14,10 @@ import twixtools.twixprot as twixprot
 import twixtools.helpers as helpers
 import twixtools.mdb
 import twixtools.hdr_def as hdr_def
-
+import twixtools.geometry
 
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
-              include_scans=None, parse_data=True):
+              include_scans=None, parse_data=True, parse_geometry=True):
     """Function for reading siemens twix raw data files.
 
     Parameters
@@ -31,6 +31,11 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         This is helpful for twix writing, but unnecessary otherwise.
     include_scans: list of scan numbers or None, optional
         By default, all scans in a multi-raid file are parsed.
+    parse_data: bool, optional
+        Set to False to parse only protocol information.
+    parse_geometry: bool, optional
+        Set to False to skip creation of transformation matrix from data
+        coordinates to physical coordinates.
 
     Returns
     -------
@@ -40,6 +45,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             - hdr_str: header bytearray (used by write_twix)
             - mdb: list of measurement data blocks -- here is the MRI data
               use `help(twixtools.mdb.Mdb)` for more information
+            - geometry: dict containing geometry information about the scan
+              use `help(twixtools.geometry)` for more information
     """
     if isinstance(infile, str):
         # assume that complete path is given
@@ -114,6 +121,9 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
 
         if version_is_ve:
             out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
+
+        if parse_geometry:
+            out[-1]['geometry'] = twixtools.geometry.Geometry(out[-1])
 
         # if data is not requested (headers only)
         if not parse_data:

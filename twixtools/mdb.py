@@ -14,6 +14,32 @@ class Mdb_base(object):
             self.mdh = np.zeros(1, dtype=mdh_def.vb17_hdr_type)
             self.channel_hdr = None
 
+    def __str__(self):
+        return ( "Mdb:\n"
+                f"  ScanCounter: {self.mdh['ulScanCounter']}\n"
+                f"  TimeStamp / PMUTimeStamp: {self.mdh['ulTimeStamp']} / {self.mdh['ulPMUTimeStamp']}\n"
+                f"  Active Flags: {self.get_active_flags()}\n"
+                f"  UsedChannels: {self.mdh['ushUsedChannels']}\n"
+                f"  SamplesInScan: {self.mdh['ushSamplesInScan']}\n"
+                f"  CutOff: {self.mdh['sCutOff']}\n"
+                f"  fReadOutOffcentre: {self.mdh['fReadOutOffcentre']}\n"
+                f"  KSpaceCentreColumn: {self.mdh['ushKSpaceCentreColumn']}\n"
+                f"  KSpaceCentreLineNo: {self.mdh['ushKSpaceCentreLineNo']}\n"
+                f"  KSpaceCentrePartitionNo: {self.mdh['ushKSpaceCentrePartitionNo']}\n"
+                 "  Counter:\n"
+                f"    Lin: {self.mdh['sLC']['ushLine']}\n"
+                f"    Par: {self.mdh['sLC']['ushPartition']}\n"
+                f"    Sli: {self.mdh['sLC']['ushSlice']}\n"
+                f"    Acq: {self.mdh['sLC']['ushAcquisition']}\n"
+                f"    Rep: {self.mdh['sLC']['ushRepetition']}\n"
+                f"    Set: {self.mdh['sLC']['ushSet']}\n"
+                f"    Seg: {self.mdh['sLC']['ushSeg']}\n"
+                f"    Ida->Ide: {list(self.mdh['sLC'])[-5:]}\n"
+                f"  SliceData:\n"
+                f"    SlicePosVec: {self.mdh['sSliceData']['sSlicePosVec']}\n"
+                f"    Quaternion:  {self.mdh['sSliceData']['aflQuaternion']}"
+        )
+
     def _get_data_len(self):
         return np.uint32(8 * self.mdh['ushSamplesInScan'])
 

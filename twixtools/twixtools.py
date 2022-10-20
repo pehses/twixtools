@@ -8,7 +8,7 @@ twixtools: provides reading and limited writing capability of Siemens MRI raw
 import os
 import re
 import numpy as np
-
+from tqdm import tqdm
 
 import twixtools.twixprot as twixprot
 import twixtools.helpers as helpers
@@ -130,17 +130,16 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             continue
 
         pos = measOffset[s] + np.uint64(hdr_len)
-        scanStart = pos
+
         print('Scan ', s)
-        helpers.update_progress(pos - scanStart, scanEnd - scanStart, True)
+        progress_bar = tqdm(total = scanEnd - pos, unit='B', unit_scale=True, unit_divisor=1024)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
-            helpers.update_progress(
-                pos - scanStart, scanEnd - scanStart, False)
             fid.seek(pos, os.SEEK_SET)
             mdb = twixtools.mdb.Mdb(fid, version_is_ve)
 
             # jump to mdh of next scan
             pos += mdb.dma_len
+            progress_bar.update(mdb.dma_len)
 
             if not keep_syncdata_and_acqend:
                 if mdb.is_flag_set('SYNCDATA'):
@@ -153,7 +152,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             if mdb.is_flag_set('ACQEND'):
                 break
 
-        print()
+        progress_bar.close()
 
     fid.close()
 

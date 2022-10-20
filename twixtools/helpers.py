@@ -38,18 +38,3 @@ def idea_version_check(f):
 
     return version_is_ve, NScans
 
-
-def update_progress(cPos, endPos, initialize=False):
-    if initialize:
-        update_progress.tstart = time.time()
-        update_progress.preprogress = -1
-
-    progress = round(float(cPos) / endPos * 100)
-    if progress - update_progress.preprogress >= 1:
-        elapsed_time = (time.time() - update_progress.tstart)
-        remain_time = elapsed_time * (100. / max(progress, 1) - 1.)
-        # sys.stdout.mode
-        sys.stdout.write('\r%3d %% parsed in %d s. Estimated %d s remaining.'
-                         % (progress, round(elapsed_time), round(remain_time)))
-        sys.stdout.flush()
-        update_progress.preprogress = progress

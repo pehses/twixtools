@@ -20,6 +20,7 @@ setup(name='twixtools',
       license='MIT License',
       packages=['twixtools','twixtools/contrib'],
       scripts=['twixtools/twixzip.py','utils/convert_to_cfl.py', 'utils/rotate_3Dcfl.py'],
+      dependencies = ['tqdm'],
       zip_safe=False,
       test_suite="test",
       )

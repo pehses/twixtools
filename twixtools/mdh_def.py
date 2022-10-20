@@ -1,97 +1,97 @@
 import numpy as np
 
 
-mdhLC = [("ushLine", "<u2"),
-         ("ushAcquisition", "<u2"),
-         ("ushSlice", "<u2"),
-         ("ushPartition", "<u2"),
-         ("ushEcho", "<u2"),
-         ("ushPhase", "<u2"),
-         ("ushRepetition", "<u2"),
-         ("ushSet", "<u2"),
-         ("ushSeg", "<u2"),
-         ("ushIda", "<u2"),
-         ("ushIdb", "<u2"),
-         ("ushIdc", "<u2"),
-         ("ushIdd", "<u2"),
-         ("ushIde", "<u2")]
+mdhLC = [("Lin", "<u2"),
+         ("Ave", "<u2"),
+         ("Sli", "<u2"),
+         ("Par", "<u2"),
+         ("Eco", "<u2"),
+         ("Phs", "<u2"),
+         ("Rep", "<u2"),
+         ("Set", "<u2"),
+         ("Seg", "<u2"),
+         ("Ida", "<u2"),
+         ("Idb", "<u2"),
+         ("Idc", "<u2"),
+         ("Idd", "<u2"),
+         ("Ide", "<u2")]
 
-mdhCutOff = [("ushPre", "<u2"),
-             ("ushPost", "<u2")]
+mdhCutOff = [("Pre", "<u2"),
+             ("Post", "<u2")]
 
-mdhSlicePosVec = [("flSag", "<f4"),
-                  ("flCor", "<f4"),
-                  ("flTra", "<f4")]
+mdhSlicePosVec = [("Sag", "<f4"),
+                  ("Cor", "<f4"),
+                  ("Tra", "<f4")]
 
-mdhSliceData = [("sSlicePosVec", mdhSlicePosVec),
-                ("aflQuaternion", "<f4", 4)]
+mdhSliceData = [("SlicePos", mdhSlicePosVec),
+                ("Quaternion", "<f4", 4)]
 
 
 # This is the VB line header
-vb17_header = [("ulFlagsAndDMALength", "<u4"),
-               ("lMeasUID", "<i4"),
-               ("ulScanCounter", "<u4"),
-               ("ulTimeStamp", "<u4"),
-               ("ulPMUTimeStamp", "<u4"),
-               ("aulEvalInfoMask", "<u8"),
-               ("ushSamplesInScan", "<u2"),
-               ("ushUsedChannels", "<u2"),
-               ("sLC", mdhLC),
-               ("sCutOff", mdhCutOff),
-               ("ushKSpaceCentreColumn", "<u2"),
-               ("ushCoilSelect", "<u2"),
-               ("fReadOutOffcentre", "<f4"),
-               ("ulTimeSinceLastRF", "<u4"),
-               ("ushKSpaceCentreLineNo", "<u2"),
-               ("ushKSpaceCentrePartitionNo", "<u2"),
-               ("aushIceProgramPara", "<u2", 4),
-               ("aushFreePara", "<u2", 4),
-               ("sSliceData", mdhSliceData),
-               ("ushChannelId", "<u2"),
-               ("ushPTABPosNeg", "<u2")]
+vb17_header = [("FlagsAndDMALength", "<u4"),
+               ("MeasUID", "<i4"),
+               ("ScanCounter", "<u4"),
+               ("TimeStamp", "<u4"),
+               ("PMUTimeStamp", "<u4"),
+               ("EvalInfoMask", "<u8"),
+               ("SamplesInScan", "<u2"),
+               ("UsedChannels", "<u2"),
+               ("Counter", mdhLC),
+               ("CutOff", mdhCutOff),
+               ("CenterCol", "<u2"),
+               ("CoilSelect", "<u2"),
+               ("ReadOutOffcentre", "<f4"),
+               ("TimeSinceLastRF", "<u4"),
+               ("CenterLin", "<u2"),
+               ("CenterPar", "<u2"),
+               ("IceProgramPara", "<u2", 4),
+               ("FreePara", "<u2", 4),
+               ("SliceData", mdhSliceData),
+               ("ChannelId", "<u2"),
+               ("PTABPosNeg", "<u2")]
 
 
 # VD/VE: One scan header for all channels
-scan_header = [("ulFlagsAndDMALength", "<u4"),
-               ("lMeasUID", "<i4"),
-               ("ulScanCounter", "<u4"),
-               ("ulTimeStamp", "<u4"),
-               ("ulPMUTimeStamp", "<u4"),
-               ("ushSystemType", "<u2"),
-               ("ulPTABPosDelay", "<u2"),
-               ("lPTABPosX", "<i4"),
-               ("lPTABPosY", "<i4"),
-               ("lPTABPosZ", "<i4"),
-               ("ulReserved1", "<i4"),
-               ("aulEvalInfoMask", "<u8"),
-               ("ushSamplesInScan", "<u2"),
-               ("ushUsedChannels", "<u2"),
-               ("sLC", mdhLC),
-               ("sCutOff", mdhCutOff),
-               ("ushKSpaceCentreColumn", "<u2"),
-               ("ushCoilSelect", "<u2"),
-               ("fReadOutOffcentre", "<f4"),
-               ("ulTimeSinceLastRF", "<u4"),
-               ("ushKSpaceCentreLineNo", "<u2"),
-               ("ushKSpaceCentrePartitionNo", "<u2"),
-               ("sSliceData", mdhSliceData),
-               ("aushIceProgramPara", "<u2", 24),
-               ("aushReservedPara", "<u2", 4),
-               ("ushApplicationCounter", "<u2"),
-               ("ushApplicationMask", "<u2"),
-               ("ulCRC", "<u4")]
+scan_header = [("FlagsAndDMALength", "<u4"),
+               ("MeasUID", "<i4"),
+               ("ScanCounter", "<u4"),
+               ("TimeStamp", "<u4"),
+               ("PMUTimeStamp", "<u4"),
+               ("SystemType", "<u2"),
+               ("PTABPosDelay", "<u2"),
+               ("PTABPosX", "<i4"),
+               ("PTABPosY", "<i4"),
+               ("PTABPosZ", "<i4"),
+               ("Reserved1", "<i4"),
+               ("EvalInfoMask", "<u8"),
+               ("SamplesInScan", "<u2"),
+               ("UsedChannels", "<u2"),
+               ("Counter", mdhLC),
+               ("CutOff", mdhCutOff),
+               ("CenterCol", "<u2"),
+               ("CoilSelect", "<u2"),
+               ("ReadOutOffcentre", "<f4"),
+               ("TimeSinceLastRF", "<u4"),
+               ("CenterLin", "<u2"),
+               ("CenterPar", "<u2"),
+               ("SliceData", mdhSliceData),
+               ("IceProgramPara", "<u2", 24),
+               ("ReservedPara", "<u2", 4),
+               ("ApplicationCounter", "<u2"),
+               ("ApplicationMask", "<u2"),
+               ("CRC", "<u4")]
 
 
 # VD/VE: One channel header per channel
-channel_header = [("ulTypeAndChannelLength", "<u4"),
-                  ("lMeasUID", "<i4"),
-                  ("ulScanCounter", "<u4"),
-                  ("ulReserved1", "<i4"),
-                  ("ulSequenceTime", "<u4"),
-                  ("ulUnused2", "<u4"),
-                  ("ulChannelId", "<u2"),
-                  ("ulUnused3", "<u2"),
-                  ("ulCRC", "<u4")]
+channel_header = [("TypeAndChannelLength", "<u4"),
+                  ("MeasUID", "<i4"),
+                  ("ScanCounter", "<u4"),
+                  ("Reserved1", "<i4"),
+                  ("SequenceTime", "<u4"),
+                  ("Unused2", "<u4"),
+                  ("ChannelId", "<u2"),
+                  ("Unused3", "<u2"),
+                  ("CRC", "<u4")]
 
 vb17_hdr_type = np.dtype(vb17_header)
 scan_hdr_type = np.dtype(scan_header)
@@ -177,7 +177,7 @@ def unpack_bits(infomask):
 
 
 def is_flag_set(mdh, flag):
-    return bool(int(mdh['aulEvalInfoMask']) & 1 << mask_dict[flag])
+    return bool(int(mdh['EvalInfoMask']) & 1 << mask_dict[flag])
 
 
 def get_flag(mdh, flag):
@@ -192,15 +192,15 @@ def set_flag(mdh, flag, val):
 
 
 def add_flag(mdh, flag):
-    mdh['aulEvalInfoMask'] |= np.uint64(1 << mask_dict[flag])
+    mdh['EvalInfoMask'] |= np.uint64(1 << mask_dict[flag])
 
 
 def remove_flag(mdh, flag):
-    mdh['aulEvalInfoMask'] &= ~np.uint64(1 << mask_dict[flag])
+    mdh['EvalInfoMask'] &= ~np.uint64(1 << mask_dict[flag])
 
 
 def get_flags(mdh):
-    mask = unpack_bits(mdh['aulEvalInfoMask'])
+    mask = unpack_bits(mdh['EvalInfoMask'])
     return dict(zip(mask_id, mask))
 
 
@@ -220,7 +220,7 @@ def set_flags(mdh, flags):
 
 
 def clear_all_flags(mdh):
-    mdh['aulEvalInfoMask'] = 0
+    mdh['EvalInfoMask'] = 0
 
 
 def is_image_scan(mdh):

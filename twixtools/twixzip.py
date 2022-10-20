@@ -79,7 +79,7 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
 
     reflect_data = False
     if (cc_active and (cc_mode == 'gcc' or cc_mode == 'gcc_bart')):
-        reflect_data = bool(int(mdh['aulEvalInfoMask']) & (1 << 24))
+        reflect_data = bool(int(mdh['EvalInfoMask']) & (1 << 24))
         if reflect_data:
             data = data[:, ::-1]
 
@@ -141,7 +141,7 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
     reflect_data = False
     if cc_mode == 'gcc' or cc_mode == 'gcc_bart':
         # for performance reasons, x dim was stored in freq. domain
-        reflect_data = bool(int(mdh['aulEvalInfoMask']) & (1 << 24))
+        reflect_data = bool(int(mdh['EvalInfoMask']) & (1 << 24))
         if reflect_data:
             data = data[:, ::-1]
 
@@ -466,7 +466,7 @@ def compress_twix(
                 is_syncscan = mdb.is_flag_set('SYNCDATA')
                 if rm_fidnav:  # we have to update the scan counters
                     if not is_syncscan:
-                        mdb.mdh['ulScanCounter'] = \
+                        mdb.mdh['ScanCounter'] = \
                             mdb_key + 1 - syncscans  # scanCounter starts at 1
                     else:
                         syncscans += 1
@@ -495,11 +495,11 @@ def compress_twix(
                     else:
                         data = data.view('uint64')
                     if len(mdb.channel_hdr) > 0:
-                        mdb.channel_hdr[0]['ulScanCounter'] =\
-                            mdb.mdh['ulScanCounter']
+                        mdb.channel_hdr[0]['ScanCounter'] =\
+                            mdb.mdh['ScanCounter']
                         info['coil_info'] = mdb.channel_hdr[0]
                         coil_list = np.asarray(
-                            [item['ulChannelId'] for item in mdb.channel_hdr],
+                            [item['ChannelId'] for item in mdb.channel_hdr],
                             dtype='uint8')
                         info['coil_list'][:len(coil_list)] = coil_list
 
@@ -592,8 +592,8 @@ def reconstruct_twix(infile, outfile=None):
                     data = getattr(f.root, scan).DATA[mdh_key]
                     data.tofile(fout)
                 else:
-                    n_sampl = mdh['ushSamplesInScan']
-                    n_coil = mdh['ushUsedChannels']
+                    n_sampl = mdh['SamplesInScan']
+                    n_coil = mdh['UsedChannels']
                     n_data_sampl = n_sampl
                     if rm_os_active:
                         n_data_sampl //= 2
@@ -629,7 +629,7 @@ def reconstruct_twix(infile, outfile=None):
                     for cha, cha_id in enumerate(
                             info['coil_list'][:data.shape[0]]):
                         # write channel id to buffer
-                        coil_hdr['ulChannelId'] = cha_id
+                        coil_hdr['ChannelId'] = cha_id
                         buffer += coil_hdr.tobytes()
                         # write data to buffer
                         buffer += data[cha].tobytes()

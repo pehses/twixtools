@@ -15,7 +15,7 @@ class test_scc(unittest.TestCase):
         with suppress_stdout_stderr():
             twix = read_twix(infile)[-1]
 
-        nc = twix['mdb'][1].mdh['ushUsedChannels']
+        nc = twix['mdb'][1].mdh['UsedChannels']
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:
@@ -47,7 +47,7 @@ class test_gcc(unittest.TestCase):
         with suppress_stdout_stderr():
             twix = read_twix(infile)[-1]
 
-        nc = twix['mdb'][1].mdh['ushUsedChannels']
+        nc = twix['mdb'][1].mdh['UsedChannels']
 
         with tempfile.NamedTemporaryFile(suffix='.dat') as out_dat:
             with tempfile.NamedTemporaryFile(suffix='.h5') as out_h5:

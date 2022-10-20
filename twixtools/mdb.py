@@ -16,32 +16,32 @@ class Mdb_base(object):
 
     def __str__(self):
         return ( "Mdb:\n"
-                f"  ScanCounter: {self.mdh['ulScanCounter']}\n"
-                f"  TimeStamp / PMUTimeStamp: {self.mdh['ulTimeStamp']} / {self.mdh['ulPMUTimeStamp']}\n"
+                f"  ScanCounter: {self.mdh['ScanCounter']}\n"
+                f"  TimeStamp / PMUTimeStamp: {self.mdh['TimeStamp']} / {self.mdh['PMUTimeStamp']}\n"
                 f"  Active Flags: {self.get_active_flags()}\n"
-                f"  UsedChannels: {self.mdh['ushUsedChannels']}\n"
-                f"  SamplesInScan: {self.mdh['ushSamplesInScan']}\n"
-                f"  CutOff: {self.mdh['sCutOff']}\n"
-                f"  fReadOutOffcentre: {self.mdh['fReadOutOffcentre']}\n"
-                f"  KSpaceCentreColumn: {self.mdh['ushKSpaceCentreColumn']}\n"
-                f"  KSpaceCentreLineNo: {self.mdh['ushKSpaceCentreLineNo']}\n"
-                f"  KSpaceCentrePartitionNo: {self.mdh['ushKSpaceCentrePartitionNo']}\n"
+                f"  UsedChannels: {self.mdh['UsedChannels']}\n"
+                f"  SamplesInScan: {self.mdh['SamplesInScan']}\n"
+                f"  CutOff: {self.mdh['CutOff']}\n"
+                f"  ReadOutOffcentre: {self.mdh['ReadOutOffcentre']:.5f}\n"
+                f"  CenterCol: {self.mdh['CenterCol']}\n"
+                f"  CenterLin: {self.mdh['CenterLin']}\n"
+                f"  CenterPar: {self.mdh['CenterPar']}\n"
                  "  Counter:\n"
-                f"    Lin: {self.mdh['sLC']['ushLine']}\n"
-                f"    Par: {self.mdh['sLC']['ushPartition']}\n"
-                f"    Sli: {self.mdh['sLC']['ushSlice']}\n"
-                f"    Acq: {self.mdh['sLC']['ushAcquisition']}\n"
-                f"    Rep: {self.mdh['sLC']['ushRepetition']}\n"
-                f"    Set: {self.mdh['sLC']['ushSet']}\n"
-                f"    Seg: {self.mdh['sLC']['ushSeg']}\n"
-                f"    Ida->Ide: {list(self.mdh['sLC'])[-5:]}\n"
+                f"    Lin: {self.mdh['Counter']['Lin']}\n"
+                f"    Par: {self.mdh['Counter']['Par']}\n"
+                f"    Sli: {self.mdh['Counter']['Sli']}\n"
+                f"    Ave: {self.mdh['Counter']['Ave']}\n"
+                f"    Rep: {self.mdh['Counter']['Rep']}\n"
+                f"    Set: {self.mdh['Counter']['Set']}\n"
+                f"    Seg: {self.mdh['Counter']['Seg']}\n"
+                f"    Ida->Ide: {list(self.mdh['Counter'])[-5:]}\n"
                 f"  SliceData:\n"
-                f"    SlicePosVec: {self.mdh['sSliceData']['sSlicePosVec']}\n"
-                f"    Quaternion:  {self.mdh['sSliceData']['aflQuaternion']}"
+                f"    SlicePos:   {self.mdh['SliceData']['SlicePos']}\n"
+                f"    Quaternion: {self.mdh['SliceData']['Quaternion']}"
         )
 
     def _get_data_len(self):
-        return np.uint32(8 * self.mdh['ushSamplesInScan'])
+        return np.uint32(8 * self.mdh['SamplesInScan'])
 
     def _get_block_len(self):
         if self.version_is_ve:
@@ -51,11 +51,11 @@ class Mdb_base(object):
 
     def _get_dma_len(self):
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
-            return np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
+            return np.uint32(self.mdh['FlagsAndDMALength'] % (2**25))
 
-        # override value found in 'ulFlagsAndDMALength' which is sometimes
+        # override value found in 'FlagsAndDMALength' which is sometimes
         # not quite correct (e.g. in case PackBit is set)
-        out = self.mdh['ushUsedChannels'] * self.block_len
+        out = self.mdh['UsedChannels'] * self.block_len
         if self.version_is_ve:
             out += mdh_def.scan_hdr_type.itemsize
         return np.uint32(out)
@@ -96,45 +96,45 @@ class Mdb_base(object):
 
     @property
     def cLin(self):
-        return self.mdh['sLC']['ushLine']
+        return self.mdh['Counter']['Lin']
 
     @property
-    def cAcq(self):
-        return self.mdh['sLC']['ushAcquisition']
+    def cAve(self):
+        return self.mdh['Counter']['Ave']
 
     @property
     def cSlc(self):
-        return self.mdh['sLC']['ushSlice']
+        return self.mdh['Counter']['Sli']
 
     @property
     def cPar(self):
-        return self.mdh['sLC']['ushPartition']
+        return self.mdh['Counter']['Par']
 
     @property
     def cEco(self):
-        return self.mdh['sLC']['ushEcho']
+        return self.mdh['Counter']['Eco']
 
     @property
     def cPhs(self):
-        return self.mdh['sLC']['ushPhase']
+        return self.mdh['Counter']['Phs']
 
     @property
     def cRep(self):
-        return self.mdh['sLC']['ushRepetition']
+        return self.mdh['Counter']['Rep']
 
     @property
     def cSet(self):
-        return self.mdh['sLC']['ushSet']
+        return self.mdh['Counter']['Set']
 
     @property
     def cSeg(self):
-        return self.mdh['sLC']['ushSeg']
+        return self.mdh['Counter']['Seg']
 
     def update_CRC(self):
         if self.version_is_ve:
             # CRC is currently not used by Siemens
-            self.mdh["ulCRC"] = 0
-            self.channel_hdr["ulCRC"] = 0
+            self.mdh["CRC"] = 0
+            self.channel_hdr["CRC"] = 0
 
     def set_timestamps(self, value=None):
         self.set_timestamp(value)
@@ -144,16 +144,16 @@ class Mdb_base(object):
         if value is None:
             from time import time
             value = int(time+0.5)
-        self.mdh["ulTimeStamp"] = value
+        self.mdh["TimeStamp"] = value
         if self.version_is_ve:
             for hdr in self.channel_hdr:
-                hdr["ulSequenceTime"] = value
+                hdr["SequenceTime"] = value
 
     def set_pmutimestamp(self, value=None):
         if value is None:
             from time import time
             value = int(time+0.5)
-        self.mdh["ulPMUTimeStamp"] = value
+        self.mdh["PMUTimeStamp"] = value
 
     def write_to_file(self, fid):
         pass
@@ -181,8 +181,8 @@ class Mdb_local(Mdb_base):
     def _update_hdr(self, ncha, ncol):
         if self.mdh is None:
             self.mdh = dict()
-        self.mdh["ushSamplesInScan"] = ncol
-        self.mdh["ushUsedChannels"] = ncha
+        self.mdh["SamplesInScan"] = ncol
+        self.mdh["UsedChannels"] = ncha
         if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
             pass
         if self.version_is_ve:
@@ -192,7 +192,7 @@ class Mdb_local(Mdb_base):
             for c in range(ncha):
                 if c >= len(self.channel_hdr):
                     self.channel_hdr.append(self.channel_hdr[0])
-                self.channel_hdr[c]["ulChannelId"] = c
+                self.channel_hdr[c]["ChannelId"] = c
             del(self.channel_hdr[ncha:])
 
 
@@ -251,7 +251,7 @@ class Mdb(Mdb_base):
                 self.fid, dtype=mdh_def.scan_hdr_type, count=1)[0]
             if not self.is_flag_set('ACQEND')\
                     and not self.is_flag_set('SYNCDATA'):
-                for _ in range(self.mdh['ushUsedChannels']):
+                for _ in range(self.mdh['UsedChannels']):
                     chan_hd = np.fromfile(
                         self.fid, dtype=mdh_def.channel_hdr_type, count=1)[0]
                     self.channel_hdr.append(chan_hd)
@@ -274,7 +274,7 @@ class Mdb(Mdb_base):
 
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
             # channel header is in this case assumed to be part of 'data'
-            dma_len_ = np.uint32(self.mdh['ulFlagsAndDMALength'] % (2**25))
+            dma_len_ = np.uint32(self.mdh['FlagsAndDMALength'] % (2**25))
             if not self.version_is_ve:
                 self.fid.seek(mdh_def.vb17_hdr_type.itemsize, os.SEEK_CUR)
             dma_len_ -= mdh_def.scan_hdr_type.itemsize
@@ -282,9 +282,9 @@ class Mdb(Mdb_base):
         else:
             dt = np.dtype(
                 [('skip', bytes, skip_bytes),
-                 ('data', np.complex64, self.mdh['ushSamplesInScan'])])
+                 ('data', np.complex64, self.mdh['SamplesInScan'])])
             out = np.fromfile(
-                self.fid, dtype=dt, count=self.mdh['ushUsedChannels'])['data']
+                self.fid, dtype=dt, count=self.mdh['UsedChannels'])['data']
 
         if was_closed:
             self.fid.close()

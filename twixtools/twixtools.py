@@ -278,16 +278,16 @@ def construct_multiheader(scanlist):
 
 
 def fix_scancounters(mdb_list, start_cnt=1):
-    ''' makes sure that all ulScanCounter in mdb_list are consecutive integers
+    ''' makes sure that all ScanCounter in mdb_list are consecutive integers
     This is necessary if mdbs are added/removed to/from a mdb_list.
     '''
     cnt = start_cnt
     for mdb in mdb_list:
         if mdb.is_flag_set('SYNCDATA'):  # ignore SYNCDATA
             continue
-        mdb.mdh['ulScanCounter'] = cnt
+        mdb.mdh['ScanCounter'] = cnt
         for cha in mdb.channel_hdr:
-            cha['ulScanCounter'] = cnt
+            cha['ScanCounter'] = cnt
         cnt += 1
 
 

@@ -4,11 +4,9 @@ import os
 import time
 import argparse
 import numpy as np
-import tables
 import twixtools
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
-import pyzfp
 from twixtools.recon_helpers import to_freqdomain, to_timedomain
 
 # profiler workaround:
@@ -367,6 +365,9 @@ def compress_twix(
 
     with suppress_stdout_stderr():
         twix = twixtools.read_twix(infile)
+
+    import tables
+    import pyzfp
 
     # start with default lossless compression settings
     filters = tables.Filters(complevel=5, complib='zlib')

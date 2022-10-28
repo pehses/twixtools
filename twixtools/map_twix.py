@@ -46,7 +46,7 @@ twix_category = {
 }
 
 
-def map_twix(input):
+def map_twix(input, verbose=True):
     """ creates a list of measurements (or a single dict if input was dict)
     with data for each measurement mapped to a twix_array object.
 
@@ -109,7 +109,7 @@ def map_twix(input):
         twix = [input]
     else:
         # assume that this is the filename or a meas id
-        twix = twixtools.read_twix(input)
+        twix = twixtools.read_twix(input, verbose=verbose)
 
     out = list()
     for meas in twix:

@@ -17,7 +17,7 @@ import twixtools.hdr_def as hdr_def
 import twixtools.geometry
 
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
-              include_scans=None, parse_data=True, parse_geometry=True):
+              include_scans=None, parse_data=True, parse_geometry=True, verbose=True):
     """Function for reading siemens twix raw data files.
 
     Parameters
@@ -75,7 +75,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
     out = list()
     # lazy software version check (VB or VD?)
     if version_is_ve:
-        print('Software version: VD/VE (!?)')
+        if verbose:
+            print('Software version: VD/VE (!?)')
         fid.seek(0, os.SEEK_SET)  # move pos to 9th byte in file
         raidfile_hdr = np.fromfile(fid, dtype=hdr_def.MultiRaidFileHeader,
                                    count=1)[0]
@@ -93,12 +94,14 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
     else:
         # in VB versions, the first 4 bytes indicate the beginning of the
         # raw data part of the file
-        print('Software  : VB (!?)')
+        if verbose:
+            print('Software  : VB (!?)')
         # VB does not support multiple scans in one file:
         measOffset = [np.uint64(0)]
         measLength = [fileSize]
 
-    print('')
+    if verbose:
+        print('')
     for s in range(NScans):
         if include_scans is not None and s not in include_scans:
             # skip scan if it is not requested
@@ -131,15 +134,17 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
 
         pos = measOffset[s] + np.uint64(hdr_len)
 
-        print('Scan ', s)
-        progress_bar = tqdm(total = scanEnd - pos, unit='B', unit_scale=True, unit_divisor=1024)
+        if verbose:
+            print('Scan ', s)
+            progress_bar = tqdm(total = scanEnd - pos, unit='B', unit_scale=True, unit_divisor=1024)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
             fid.seek(pos, os.SEEK_SET)
             mdb = twixtools.mdb.Mdb(fid, version_is_ve)
 
             # jump to mdh of next scan
             pos += mdb.dma_len
-            progress_bar.update(mdb.dma_len)
+            if verbose:
+                progress_bar.update(mdb.dma_len)
 
             if not keep_syncdata_and_acqend:
                 if mdb.is_flag_set('SYNCDATA'):
@@ -152,7 +157,8 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             if mdb.is_flag_set('ACQEND'):
                 break
 
-        progress_bar.close()
+        if verbose:
+            progress_bar.close()
 
     fid.close()
 

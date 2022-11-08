@@ -304,6 +304,23 @@ class twix_array():
         self._flags = self._flags.copy()
         return twix_array(self.mdb_list, self.hdr, self.flags)
 
+    def __str__(self):
+        """Convert to string, for str()."""
+        s  = f"\n{self.__class__.__module__}.{self.__class__.__qualname__}:"
+        s +=  "\n  hdr: dict with header info"
+        s +=  "\n  mdb_list: list of Mdb objects"
+        s += f"\n  shape: {self.shape}"
+        s += f"\n  dims: {self.dims}"
+        s += f"\n  kspace_center_col: {self.kspace_center_col}"
+        s += f"\n  kspace_center_lin: {self.kspace_center_lin}"
+        s += f"\n  kspace_center_par: {self.kspace_center_par}"
+        s += f"\n  fft_scale: {self.fft_scale}"
+        s += f"\n  rawdata_corrfactors: {self.rawdata_corrfactors}"
+        s +=  "\n  flags:"
+        for key, item in self.flags.items():
+            s += f"\n    {key}: {item}"
+        return s
+
     @property
     def dim_order(self):
         return self._dim_order

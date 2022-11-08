@@ -15,7 +15,8 @@ class Mdb_base(object):
             self.channel_hdr = None
 
     def __str__(self):
-        return ( "Mdb:\n"
+        """Convert to string, for str()."""
+        return ( f"{self.__class__.__module__}.{self.__class__.__qualname__}:\n"
                 f"  ScanCounter: {self.mdh['ScanCounter']}\n"
                 f"  TimeStamp / PMUTimeStamp: {self.mdh['TimeStamp']} / {self.mdh['PMUTimeStamp']}\n"
                 f"  Active Flags: {self.get_active_flags()}\n"

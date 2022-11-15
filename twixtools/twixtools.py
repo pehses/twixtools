@@ -16,6 +16,7 @@ import twixtools.mdb
 import twixtools.hdr_def as hdr_def
 import twixtools.geometry
 
+
 def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
               include_scans=None, parse_data=True, parse_geometry=True, verbose=True):
     """Function for reading siemens twix raw data files.
@@ -100,8 +101,16 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         measOffset = [np.uint64(0)]
         measLength = [fileSize]
 
+    if include_scans is not None:
+        # force include_scans to be iterable:
+        if not hasattr(include_scans, '__iter__'):
+            include_scans = [include_scans]
+        # handle negative indexing:
+        include_scans = [range(NScans)[k] for k in include_scans]
+
     if verbose:
         print('')
+
     for s in range(NScans):
         if include_scans is not None and s not in include_scans:
             # skip scan if it is not requested

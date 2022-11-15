@@ -26,8 +26,8 @@ class test_zfp(unittest.TestCase):
                              'zfp: file size not equal to original')
 
             with suppress_stdout_stderr():
-                twix_orig = read_twix(infile)[-1]
-                twix_new = read_twix(out_dat.name)[-1]
+                twix_orig = read_twix(infile, keep_syncdata_and_acqend=True)[-1]
+                twix_new = read_twix(out_dat.name, keep_syncdata_and_acqend=True)[-1]
 
             self.assertTrue(
                 (np.all(twix_orig['hdr_str'] == twix_new['hdr_str'])),

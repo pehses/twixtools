@@ -13,7 +13,7 @@ class test_scc(unittest.TestCase):
     def test(self):
 
         with suppress_stdout_stderr():
-            twix = read_twix(infile)[-1]
+            twix = read_twix(infile, keep_syncdata_and_acqend=True)[-1]
 
         nc = twix['mdb'][1].mdh['UsedChannels']
 
@@ -25,8 +25,8 @@ class test_scc(unittest.TestCase):
                     infile=out_h5.name, outfile=out_dat.name)
 
             with suppress_stdout_stderr():
-                twix = read_twix(infile)[-1]
-                twix_new = read_twix(out_dat.name)[-1]
+                twix = read_twix(infile, keep_syncdata_and_acqend=True)[-1]
+                twix_new = read_twix(out_dat.name, keep_syncdata_and_acqend=True)[-1]
 
             for mdb, mdb_new in zip(twix['mdb'], twix_new['mdb']):
                 if mdb.is_flag_set('ACQEND'):
@@ -45,7 +45,7 @@ class test_gcc(unittest.TestCase):
     def test(self):
 
         with suppress_stdout_stderr():
-            twix = read_twix(infile)[-1]
+            twix = read_twix(infile, keep_syncdata_and_acqend=True)[-1]
 
         nc = twix['mdb'][1].mdh['UsedChannels']
 
@@ -57,8 +57,8 @@ class test_gcc(unittest.TestCase):
                     infile=out_h5.name, outfile=out_dat.name)
 
             with suppress_stdout_stderr():
-                twix = read_twix(infile)[-1]
-                twix_new = read_twix(out_dat.name)[-1]
+                twix = read_twix(infile, keep_syncdata_and_acqend=True)[-1]
+                twix_new = read_twix(out_dat.name, keep_syncdata_and_acqend=True)[-1]
 
             for mdb, mdb_new in zip(twix['mdb'], twix_new['mdb']):
                 if mdb.is_flag_set('ACQEND'):

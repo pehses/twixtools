@@ -173,7 +173,7 @@ mask_dict = {item: key for key, item in enumerate(mask_id)}
 def unpack_bits(infomask):
     # numpy's unpackbits does not work correctly for some reason
     return np.bitwise_and(
-        infomask, 2**np.arange(8*infomask.nbytes)).astype(bool)
+        infomask, np.left_shift(2, np.arange(-1, 8*infomask.nbytes-1, dtype=np.uint64))).astype(bool)
 
 
 def is_flag_set(mdh, flag):

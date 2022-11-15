@@ -17,26 +17,28 @@ import twixtools.hdr_def as hdr_def
 import twixtools.geometry
 
 
-def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
-              include_scans=None, parse_data=True, parse_geometry=True, verbose=True):
+def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
+              parse_geometry=True, verbose=True, keep_syncdata_and_acqend=False):
     """Function for reading siemens twix raw data files.
 
     Parameters
     ----------
     infile : filename or measurement id of .dat file
-    read_prot : bool, optional
-        By default, the protocol information is read and parsed
-        (this is also highly recommended)
-    keep_syncdata_and_acqend : bool, optional
-        By default, syncdata and acqend blocks are included in the mdb list.
-        This is helpful for twix writing, but unnecessary otherwise.
     include_scans: list of scan numbers or None, optional
         By default, all scans in a multi-raid file are parsed.
+    parse_prot : bool, optional
+        By default, the protocol information is parsed.
+        (this is also highly recommended)
     parse_data: bool, optional
         Set to False to parse only protocol information.
     parse_geometry: bool, optional
         Set to False to skip creation of transformation matrix from data
         coordinates to physical coordinates.
+    verbose: bool, optional
+        Switch progress and other messages on or off.
+    keep_syncdata_and_acqend : bool, optional
+        By default, syncdata and acqend blocks are not included in the mdb list.
+        These blocks are helpful for twix writing, but unnecessary otherwise.
 
     Returns
     -------
@@ -124,7 +126,7 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
         hdr_len = meas_init["hdr_len"]
         out.append(dict())
         out[-1]['mdb'] = list()
-        if read_prot:
+        if parse_prot:
             fid.seek(pos, os.SEEK_SET)
             hdr = twixprot.parse_twix_hdr(fid)
             out[-1]['hdr'] = hdr
@@ -148,7 +150,11 @@ def read_twix(infile, read_prot=True, keep_syncdata_and_acqend=True,
             progress_bar = tqdm(total = scanEnd - pos, unit='B', unit_scale=True, unit_divisor=1024)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
             fid.seek(pos, os.SEEK_SET)
-            mdb = twixtools.mdb.Mdb(fid, version_is_ve)
+            try:
+                mdb = twixtools.mdb.Mdb(fid, version_is_ve)
+            except:
+                print(f"WARNING: Mdb parsing encountered an error at file position {pos}/{scanEnd}, stopping here.")
+                break
 
             # jump to mdh of next scan
             pos += mdb.dma_len

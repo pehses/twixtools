@@ -248,16 +248,16 @@ class twix_array():
                                         dtype=self.dt_dims[1])
 
         for mdb in self.mdb_list:
-            Counter = mdb.mdh['Counter']
-            Counter = np.asarray(Counter[self.sorted_mdh_keys].tolist(),
-                             dtype=Counter[0].dtype)
-            req_shape = 1 + Counter
+            counter = mdb.mdh.Counter
+            
+            counter = np.asarray([getattr(counter, key) for key in self.sorted_mdh_keys], dtype=int)
+            req_shape = 1 + counter
             # add channels & columns
             req_shape = np.concatenate([req_shape,
-                                        [mdb.mdh['UsedChannels'],
-                                         mdb.mdh['SamplesInScan']]])
+                                        [mdb.mdh.UsedChannels,
+                                         mdb.mdh.SamplesInScan]])
             shp = np.maximum(shp, req_shape)
-            self._first_ix = np.minimum(self._first_ix, Counter)
+            self._first_ix = np.minimum(self._first_ix, counter)
 
         self.base_size = np.ones(1, dtype=self.dt_dims)[0]
         for key, item in enumerate(shp):
@@ -293,9 +293,9 @@ class twix_array():
         self.rawdata_corrfactors = np.ones(self.base_size['Cha'], complex)
 
         # determine k-space center position from first mdb
-        self.kspace_center_col = mdb.mdh['CenterCol']
-        self.kspace_center_lin = mdb.mdh['CenterLin']
-        self.kspace_center_par = mdb.mdh['CenterPar']
+        self.kspace_center_col = mdb.mdh.CenterCol
+        self.kspace_center_lin = mdb.mdh.CenterLin
+        self.kspace_center_par = mdb.mdh.CenterPar
 
     def copy(self):
         return self.__copy__()
@@ -511,9 +511,6 @@ class twix_array():
         if skip_empty_lead:
             lpos, ppos = self.dim_order.index('Lin'),\
                 self.dim_order.index('Par')
-            Counter_names = [item[0] for item in twixtools.mdh_def.mdhLC]
-            Counter_lpos, Counter_ppos = Counter_names.index('Lin'),\
-                Counter_names.index('Par')
 
         target_sz = list(self_shape)
 
@@ -555,20 +552,21 @@ class twix_array():
         # this is not very efficient for large files, but fool-proof
         for mdb in self.mdb_list:
 
-            Counter = mdb.mdh['Counter'].copy()
+            Counter = copy.deepcopy(mdb.mdh.Counter)
 
 #            # test early exit (for profiling)
 #            if Counter['Rep']!=selection[0]:
 #                continue
 
             if skip_empty_lead:
-                Counter[Counter_lpos] -= self._first_ix[lpos]
-                Counter[Counter_ppos] -= self._first_ix[ppos]
+                Counter.Lin -= self._first_ix[lpos]
+                Counter.Par -= self._first_ix[ppos]
             else:
-                Counter['Lin'] += self.lin_offset
-                Counter['Par'] += self.par_offset
+                Counter.Lin += self.lin_offset
+                Counter.Par += self.par_offset
 
-            counters = Counter[Counter_sel]
+            counters = [getattr(Counter, key) for key in Counter_sel]
+
 
             # check if we have to read this mdb
             do_not_read = False
@@ -607,7 +605,7 @@ class twix_array():
                 if regrid and self.rs_traj is not None\
                         and not mdb.is_flag_set('SKIP_REGRIDDING'):
                     data = perform_regrid(
-                        data, self.rs_traj, mdb.mdh["ReadOutOffcentre"])
+                        data, self.rs_traj, mdb.mdh.ReadOutOffcentre)
 
                 if remove_os:
                     data, _ = remove_oversampling(data)

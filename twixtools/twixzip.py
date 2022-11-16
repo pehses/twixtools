@@ -4,6 +4,7 @@ import os
 import time
 import argparse
 import numpy as np
+import ctypes
 import twixtools
 import twixtools.mdh_def as mdh_def
 import twixtools.hdr_def as hdr_def
@@ -77,7 +78,7 @@ def reduce_data(data, mdh, remove_os=False, cc_mode=False, mtx=None, ncc=None):
 
     reflect_data = False
     if (cc_active and (cc_mode == 'gcc' or cc_mode == 'gcc_bart')):
-        reflect_data = bool(int(mdh['EvalInfoMask']) & (1 << 24))
+        reflect_data = bool(int(mdh.EvalInfoMask) & (1 << 24))
         if reflect_data:
             data = data[:, ::-1]
 
@@ -139,7 +140,7 @@ def expand_data(data, mdh, remove_os=False, cc_mode=False, inv_mtx=None):
     reflect_data = False
     if cc_mode == 'gcc' or cc_mode == 'gcc_bart':
         # for performance reasons, x dim was stored in freq. domain
-        reflect_data = bool(int(mdh['EvalInfoMask']) & (1 << 24))
+        reflect_data = bool(int(mdh.EvalInfoMask) & (1 << 24))
         if reflect_data:
             data = data[:, ::-1]
 
@@ -348,13 +349,14 @@ def get_cal_data(meas, remove_os):
     return cal_data
 
 
-datinfo = [('mdh_info', mdh_def.scan_header),
-           ('coil_info', mdh_def.channel_header),
-           ('coil_list', 'uint8', 64),  # max supported number of coils
-           ('rm_os_active', 'bool'),
-           ('cc_active', 'bool')]
-
-datinfo_type = np.dtype(datinfo)
+class DatInfo(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("mdh_info",  mdh_def.Scan_header),
+        ("coil_info", mdh_def.Channel_header),
+        ("coil_list", ctypes.c_uint8 * 64), # max supported number of coils
+        ("rm_os_active", ctypes.c_bool),
+        ("cc_active", ctypes.c_bool)]
 
 
 @profile
@@ -451,7 +453,7 @@ def compress_twix(
 
             # create info array with mdh, coil & compression information
             f.create_carray(
-                grp, "info", shape=[mdh_count, datinfo_type.itemsize],
+                grp, "info", shape=[mdh_count, ctypes.sizeof(DatInfo)],
                 atom=tables.UInt8Atom(), filters=filters)
 
             dt = tables.UInt64Atom(shape=())
@@ -463,27 +465,27 @@ def compress_twix(
 
             syncscans = 0
             for mdb_key, mdb in enumerate(meas['mdb']):
-                info = np.zeros(1, dtype=datinfo_type)[0]
+                info = DatInfo()
                 is_syncscan = mdb.is_flag_set('SYNCDATA')
                 if rm_fidnav:  # we have to update the scan counters
                     if not is_syncscan:
-                        mdb.mdh['ScanCounter'] = \
+                        mdb.mdh.ScanCounter = \
                             mdb_key + 1 - syncscans  # scanCounter starts at 1
                     else:
                         syncscans += 1
 
                 # store mdh
-                info['mdh_info'] = mdb.mdh
+                info.mdh_info = mdb.mdh
 
                 if is_syncscan or mdb.is_flag_set('ACQEND'):
                     data = np.ascontiguousarray(mdb.data).view('uint64')
                 else:
                     restrictions = get_restrictions(mdb.get_flags())
                     if restrictions == 'NO_COILCOMP':
-                        data, info['rm_os_active'], _ = reduce_data(
+                        data, info.rm_os_active, _ = reduce_data(
                             mdb.data, mdb.mdh, remove_os, cc_mode=False)
                     else:
-                        data, info['rm_os_active'], info['cc_active'] =\
+                        data, info.rm_os_active, info.cc_active =\
                             reduce_data(
                                 mdb.data, mdb.mdh, remove_os, cc_mode=cc_mode,
                                 mtx=mtx, ncc=ncc)
@@ -496,13 +498,13 @@ def compress_twix(
                     else:
                         data = data.view('uint64')
                     if len(mdb.channel_hdr) > 0:
-                        mdb.channel_hdr[0]['ScanCounter'] =\
-                            mdb.mdh['ScanCounter']
-                        info['coil_info'] = mdb.channel_hdr[0]
+                        mdb.channel_hdr[0].ScanCounter =\
+                            mdb.mdh.ScanCounter
+                        info.coil_info = mdb.channel_hdr[0]
                         coil_list = np.asarray(
-                            [item['ChannelId'] for item in mdb.channel_hdr],
+                            [item.ChannelId for item in mdb.channel_hdr],
                             dtype='uint8')
-                        info['coil_list'][:len(coil_list)] = coil_list
+                        info.coil_list[:len(coil_list)] = coil_list
 
                 # write data
                 grp.DATA.append(data)
@@ -525,6 +527,10 @@ def compress_twix(
 
 @profile
 def reconstruct_twix(infile, outfile=None):
+
+    import tables
+    import pyzfp
+
     # wip: function takes no parameters, all necessary information needs to be
     # included in hdf file
     def write_sync_bytes(f):
@@ -577,14 +583,14 @@ def reconstruct_twix(infile, outfile=None):
             getattr(f.root, scan).hdr_str[()].tofile(fout)
 
             for mdh_key, raw_info in enumerate(getattr(f.root, scan).info[()]):
-                info = np.frombuffer(raw_info, dtype=datinfo_type)[0]
+                info = DatInfo.from_buffer(raw_info)
 
                 # write mdh
-                mdh = info['mdh_info']
-                mdh.tofile(fout)
+                mdh = info.mdh_info
+                fout.write(bytearray(mdh))
 
-                rm_os_active = info['rm_os_active']
-                cc_active = info['cc_active']
+                rm_os_active = info.rm_os_active
+                cc_active = info.cc_active
 
                 # write data
                 is_bytearray = mdh_def.is_flag_set(mdh, 'ACQEND')\
@@ -593,8 +599,8 @@ def reconstruct_twix(infile, outfile=None):
                     data = getattr(f.root, scan).DATA[mdh_key]
                     data.tofile(fout)
                 else:
-                    n_sampl = mdh['SamplesInScan']
-                    n_coil = mdh['UsedChannels']
+                    n_sampl = mdh.SamplesInScan
+                    n_coil = mdh.UsedChannels
                     n_data_sampl = n_sampl
                     if rm_os_active:
                         n_data_sampl //= 2
@@ -624,14 +630,14 @@ def reconstruct_twix(infile, outfile=None):
                             data, mdh, rm_os_active, cc_mode=False)
 
                     data = data.reshape((n_coil, -1))
-                    coil_hdr = info['coil_info']
+                    coil_hdr = info.coil_info
 
                     buffer = bytes()
                     for cha, cha_id in enumerate(
-                            info['coil_list'][:data.shape[0]]):
+                            info.coil_list[:data.shape[0]]):
                         # write channel id to buffer
-                        coil_hdr['ChannelId'] = cha_id
-                        buffer += coil_hdr.tobytes()
+                        coil_hdr.ChannelId = cha_id
+                        buffer += bytearray(coil_hdr)
                         # write data to buffer
                         buffer += data[cha].tobytes()
 

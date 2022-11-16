@@ -142,6 +142,7 @@ mask_id = (
     'FIRST_SCAN_IN_BLADE',  # Marks the first line of a blade
     'LAST_SCAN_IN_BLADE',  # Marks the last line of a blade
     'LAST_BLADE_IN_TR',  # Marks all lin. of last BLADE in each TR
+    'noname43',
     'PACE',  # Distinguishes PACE scans from non PACE scans.
     'RETRO_LASTPHASE',  # Marks the last phase in a heartbeat
     'RETRO_ENDOFMEAS',  # Marks an ADC at end of measurement
@@ -173,7 +174,7 @@ mask_dict = {item: key for key, item in enumerate(mask_id)}
 def unpack_bits(infomask):
     # numpy's unpackbits does not work correctly for some reason
     return np.bitwise_and(
-        infomask, np.left_shift(2, np.arange(-1, 8*infomask.nbytes-1, dtype=np.uint64))).astype(bool)
+        infomask, 2**np.arange(64, dtype=np.uint64)).astype(bool)
 
 
 def is_flag_set(mdh, flag):

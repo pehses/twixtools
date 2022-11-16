@@ -525,6 +525,10 @@ def compress_twix(
 
 @profile
 def reconstruct_twix(infile, outfile=None):
+
+    import tables
+    import pyzfp
+
     # wip: function takes no parameters, all necessary information needs to be
     # included in hdf file
     def write_sync_bytes(f):

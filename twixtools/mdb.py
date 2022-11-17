@@ -58,7 +58,7 @@ class Mdb_base(object):
 
     def _get_dma_len(self):
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
-            return np.uint32(self.mdh.FlagsAndDMALength % (2**25))
+            return mdh_def.get_dma_len(self.mdh)
 
         # override value found in 'FlagsAndDMALength' which is sometimes
         # not quite correct (e.g. in case PackBit is set)
@@ -255,12 +255,15 @@ class Mdb(Mdb_base):
         if self.version_is_ve:
             self.mdh = mdh_def.Scan_header()
             self.fid.readinto(self.mdh)
-            if not self.is_flag_set('ACQEND')\
-                    and not self.is_flag_set('SYNCDATA'):
-                for _ in range(self.mdh.UsedChannels):
-                    self.channel_hdr.append(mdh_def.Channel_header())
-                    self.fid.readinto(self.channel_hdr[-1])
-                    self.fid.seek(self.data_len, os.SEEK_CUR)
+            if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
+                return
+
+            bytes_inter = ctypes.sizeof(mdh_def.Channel_header)
+            block_sz = bytes_inter + self.data_len
+            buffer = self.fid.read(self.mdh.UsedChannels * block_sz)
+            self.channel_hdr = [
+                mdh_def.Channel_header.from_buffer_copy(
+                    buffer, c*block_sz) for c in range(self.mdh.UsedChannels)]
         else:
             self.mdh = mdh_def.VB17_header()
             self.fid.readinto(self.mdh)
@@ -270,29 +273,29 @@ class Mdb(Mdb_base):
         if was_closed:
             # opening/closing files adds a huge overhead, try to avoid
             self.fid = open(self.fid.name, self.fid.mode)
-        self.fid.seek(self.mem_pos)
+
         if self.version_is_ve:
-            self.fid.seek(ctypes.sizeof(mdh_def.Scan_header), os.SEEK_CUR)
-            skip_bytes = ctypes.sizeof(mdh_def.Channel_header)
+            bytes_initial = ctypes.sizeof(mdh_def.Scan_header)
+            bytes_inter = ctypes.sizeof(mdh_def.Channel_header)
         else:
-            skip_bytes = ctypes.sizeof(mdh_def.VB17_header)
+            bytes_initial = 0
+            bytes_inter = ctypes.sizeof(mdh_def.VB17_header)
+
+        self.fid.seek(self.mem_pos + bytes_initial)
+        out = self.fid.read(self.dma_len - bytes_initial)
 
         if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
-            # channel header is in this case assumed to be part of 'data'
-            dma_len_ = np.uint32(self.mdh.FlagsAndDMALength % (2**25))
-            if not self.version_is_ve:
-                self.fid.seek(ctypes.sizeof(mdh_def.VB17_header), os.SEEK_CUR)
-            dma_len_ -= ctypes.sizeof(mdh_def.Scan_header)
-            out = np.fromfile(self.fid, dtype='<S1', count=dma_len_)
+            pass  # nothing to do here
         else:
             dt = np.dtype(
-                [('skip', bytes, skip_bytes),
+                [('skip', bytes, bytes_inter),
                  ('data', np.complex64, self.mdh.SamplesInScan)])
-            out = np.fromfile(
-                self.fid, dtype=dt, count=self.mdh.UsedChannels)['data']
+            out = np.frombuffer(
+                out, dtype=dt, count=self.mdh.UsedChannels)['data']
 
         if was_closed:
             self.fid.close()
+
         return out
 
     data = property(__get_data)

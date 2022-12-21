@@ -10,10 +10,10 @@ class Mdb_base(object):
     def __init__(self, version_is_ve=True):
         self.version_is_ve = version_is_ve
         if self.version_is_ve:
-            self.mdh = mdh_def.Scan_header
+            self.mdh = mdh_def.Scan_header()
             self.channel_hdr = list()
         else:
-            self.mdh = mdh_def.VB17_header
+            self.mdh = mdh_def.VB17_header()
             self.channel_hdr = None
 
     def __str__(self):
@@ -170,7 +170,14 @@ class Mdb_local(Mdb_base):
 
     def __init__(self, data=None, version_is_ve=True):
         super().__init__(version_is_ve=version_is_ve)
-        if data is not None:
+        if self.version_is_ve:
+            self.mdh = mdh_def.Scan_header()
+        else:
+            self.mdh = mdh_def.VB17_header()
+        if data is None:
+            self.__data = (b'\x00' * 160)
+            mdh_def.set_dma_len(self.mdh, 160)
+        else:
             self._set_data(data)
 
     def _get_data(self):
@@ -180,16 +187,15 @@ class Mdb_local(Mdb_base):
         if value.ndim > 2:
             raise ValueError
         self.__data = np.complex64(np.atleast_2d(value))
-        # ncha, ncol = self.__data.shape[-2:]
-        # self._update_hdr(ncha, ncol)
+        ncha, ncol = self.__data.shape[-2:]
+        self._update_hdr(ncha, ncol)
 
     data = property(_get_data, _set_data)
 
     def _update_hdr(self, ncha, ncol):
-        if self.mdh is None:
-            self.mdh = dict()
         self.mdh.SamplesInScan = ncol
         self.mdh.UsedChannels = ncha
+        mdh_def.set_dma_len(self.mdh, self.dma_len)
         if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
             pass
         if self.version_is_ve:
@@ -244,7 +250,8 @@ class Mdb(Mdb_base):
     def convert_to_local(self):
         out = Mdb_local(self.data, self.version_is_ve)
         out.mdh = copy.deepcopy(self.mdh)
-        out.channel_hdr = copy.deepcopy(self.channel_hdr)
+        if self.version_is_ve:
+            out.channel_hdr = copy.deepcopy(self.channel_hdr)
         return out
 
     def __read_mdh(self, fid):

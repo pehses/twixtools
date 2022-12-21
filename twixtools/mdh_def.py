@@ -1,12 +1,14 @@
 import numpy as np
 import ctypes
 
+
 class MyStruct(ctypes.LittleEndianStructure):
 
     def __eq__(self, other):
         for field in self._fields_:
             attr_name = field[0]
-            a, b = object.__getattribute__(self, attr_name), object.__getattribute__(other, attr_name)
+            a, b = object.__getattribute__(
+                self, attr_name), object.__getattribute__(other, attr_name)
             is_array = isinstance(a, ctypes.Array)
             if is_array and a[:] != b[:] or not is_array and a != b:
                 return False
@@ -15,12 +17,13 @@ class MyStruct(ctypes.LittleEndianStructure):
     def __ne__(self, other):
         for field in self._fields_:
             attr_name = field[0]
-            a, b = object.__getattribute__(self, attr_name), object.__getattribute__(other, attr_name)
+            a, b = object.__getattribute__(
+                self, attr_name), object.__getattribute__(other, attr_name)
             is_array = isinstance(a, ctypes.Array)
             if is_array and a[:] != b[:] or not is_array and a != b:
                 return True
         return False
-    
+
     def __getattribute__(self, name):
         val = object.__getattribute__(self, name)
         if isinstance(val, ctypes.Array):
@@ -90,8 +93,8 @@ class SliceData(MyStruct):
 
 # This is the VB line header
 class VB17_header(MyStruct):
-    _pack_ = 1
-    _fields_ = [
+    _pack_=1
+    _fields_=[
         ("FlagsAndDMALength", ctypes.c_uint32),
         ("MeasUID", ctypes.c_int32),
         ("ScanCounter", ctypes.c_uint32),
@@ -114,10 +117,16 @@ class VB17_header(MyStruct):
         ("ChannelId", ctypes.c_uint16),
         ("PTABPosNeg", ctypes.c_uint16)]
 
+    def __init__(self, **kwargs):
+        # initialize some fields with sane defaults
+        values = {"FlagsAndDMALength": ctypes.sizeof(self), "ScanCounter": 1}
+        values.update(kwargs)
+        super().__init__(**values)
+
 # VD/VE: One scan header for all channels
 class Scan_header(MyStruct):
-    _pack_ = 1
-    _fields_ = [
+    _pack_=1
+    _fields_=[
         ("FlagsAndDMALength", ctypes.c_uint32),
         ("MeasUID", ctypes.c_int32),
         ("ScanCounter", ctypes.c_uint32),
@@ -147,11 +156,16 @@ class Scan_header(MyStruct):
         ("ApplicationMask", ctypes.c_uint16),
         ("CRC", ctypes.c_uint32)]
 
+    def __init__(self, **kwargs):
+        # initialize some fields with sane defaults
+        values = {"FlagsAndDMALength": ctypes.sizeof(self), "ScanCounter": 1}
+        values.update(kwargs)
+        super().__init__(**values)
 
 # VD/VE: One channel header per channel
 class Channel_header(MyStruct):
-    _pack_ = 1
-    _fields_ = [
+    _pack_=1
+    _fields_=[
         ("TypeAndChannelLength", ctypes.c_uint32),
         ("MeasUID", ctypes.c_int32),
         ("ScanCounter", ctypes.c_uint32),
@@ -161,9 +175,15 @@ class Channel_header(MyStruct):
         ("ChannelId", ctypes.c_uint16),
         ("Unused3", ctypes.c_uint16),
         ("CRC", ctypes.c_uint32)]
+    
+    # initialize some fields with sane defaults
+    def __init__(self, **kwargs):
+        values = { "ScanCounter": 1}
+        values.update(kwargs)
+        super().__init__(**values)
 
 
-mask_id = (
+mask_id=(
     'ACQEND',  # last scan
     'RTFEEDBACK',  # Realtime feedback scan
     'HPFEEDBACK',  # High perfomance feedback scan
@@ -231,7 +251,7 @@ mask_id = (
 )
 
 # create dict for faster access by name
-mask_dict = {item: key for key, item in enumerate(mask_id)}
+mask_dict={item: key for key, item in enumerate(mask_id)}
 
 
 # helper function (copied from mdb class)
@@ -244,6 +264,13 @@ def unpack_bits(infomask):
 
 def get_dma_len(mdh):
     return np.uint32(mdh.FlagsAndDMALength % (2**25))
+
+
+def set_dma_len(mdh, dma_len):
+    split = 2**25
+    if dma_len > split-1:
+        raise ValueError
+    mdh.FlagsAndDMALength = mdh.FlagsAndDMALength//split + dma_len
 
 
 def is_flag_set(mdh, flag):
@@ -262,15 +289,15 @@ def set_flag(mdh, flag, val):
 
 
 def add_flag(mdh, flag):
-    mdh.EvalInfoMask |= np.uint64(1 << mask_dict[flag])
+    mdh.EvalInfoMask |= (1 << mask_dict[flag])
 
 
 def remove_flag(mdh, flag):
-    mdh.EvalInfoMask &= ~np.uint64(1 << mask_dict[flag])
+    mdh.EvalInfoMask &= ~(1 << mask_dict[flag])
 
 
 def get_flags(mdh):
-    mask = unpack_bits(mdh.EvalInfoMask)
+    mask=unpack_bits(mdh.EvalInfoMask)
     return dict(zip(mask_id, mask))
 
 
@@ -290,11 +317,11 @@ def set_flags(mdh, flags):
 
 
 def clear_all_flags(mdh):
-    mdh.EvalInfoMask = 0
+    mdh.EvalInfoMask=0
 
 
 def is_image_scan(mdh):
-    disqualifier = [
+    disqualifier=[
         'ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN',
         'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60']
     for name in disqualifier:

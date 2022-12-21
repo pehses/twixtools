@@ -227,21 +227,37 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             for mdb in scan['mdb']:
                 # write mdh
                 fid.write(bytearray(mdb.mdh))
-                data = np.atleast_2d(mdb.data)
                 if version_is_ve:
                     if mdb.is_flag_set('SYNCDATA')\
                             or mdb.is_flag_set('ACQEND'):
-                        data.tofile(fid)
+                        fid.write(mdb.data)
+                        if mdb.is_flag_set('ACQEND')\
+                                and mdb is not scan['mdb'][-1]:
+                            print("WARNING: Early ACQEND detected, skipping some data during write.")
+                            break
                     else:
+                        data = np.atleast_2d(mdb.data)
                         for c in range(data.shape[0]):
                             # write channel header
                             fid.write(bytearray(mdb.channel_hdr[c]))
                             # write data
                             data[c].tofile(fid)
                 else:  # WIP: VB version
-                    fid.write(bytearray(mdb.mdh))
-                    # write data
-                    data[c].tofile(fid)
+                    data = np.atleast_2d(mdb.data)
+                    for c in range(data.shape[0]):
+                        fid.write(bytearray(mdb.mdh))
+                        data[c].tofile(fid)
+
+            if not mdb.is_flag_set('ACQEND'):
+                print("ACQEND missing at the end of the mdb list. Generating new one.")
+                acqend = twixtools.mdb.Mdb_local()
+                acqend.add_flag('ACQEND')
+                acqend.mdh.ScanCounter = mdb.mdh.ScanCounter + 1
+                acqend.mdh.TimeMeasUID = mdb.mdh.MeasUID
+                acqend.mdh.TimeStamp = mdb.mdh.TimeStamp
+                acqend.mdh.PMUTimeStamp = mdb.mdh.PMUTimeStamp
+                fid.write(bytearray(acqend.mdh))
+                fid.write(acqend.data)
 
             # update scan_len
             scan_len.append(fid.tell() - scan_pos[-1])

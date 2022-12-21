@@ -1,104 +1,189 @@
 import numpy as np
+import ctypes
 
 
-mdhLC = [("Lin", "<u2"),
-         ("Ave", "<u2"),
-         ("Sli", "<u2"),
-         ("Par", "<u2"),
-         ("Eco", "<u2"),
-         ("Phs", "<u2"),
-         ("Rep", "<u2"),
-         ("Set", "<u2"),
-         ("Seg", "<u2"),
-         ("Ida", "<u2"),
-         ("Idb", "<u2"),
-         ("Idc", "<u2"),
-         ("Idd", "<u2"),
-         ("Ide", "<u2")]
+class MyStruct(ctypes.LittleEndianStructure):
 
-mdhCutOff = [("Pre", "<u2"),
-             ("Post", "<u2")]
+    def __eq__(self, other):
+        for field in self._fields_:
+            attr_name = field[0]
+            a, b = object.__getattribute__(
+                self, attr_name), object.__getattribute__(other, attr_name)
+            is_array = isinstance(a, ctypes.Array)
+            if is_array and a[:] != b[:] or not is_array and a != b:
+                return False
+        return True
 
-mdhSlicePosVec = [("Sag", "<f4"),
-                  ("Cor", "<f4"),
-                  ("Tra", "<f4")]
+    def __ne__(self, other):
+        for field in self._fields_:
+            attr_name = field[0]
+            a, b = object.__getattribute__(
+                self, attr_name), object.__getattribute__(other, attr_name)
+            is_array = isinstance(a, ctypes.Array)
+            if is_array and a[:] != b[:] or not is_array and a != b:
+                return True
+        return False
 
-mdhSliceData = [("SlicePos", mdhSlicePosVec),
-                ("Quaternion", "<f4", 4)]
+    def __getattribute__(self, name):
+        val = object.__getattribute__(self, name)
+        if isinstance(val, ctypes.Array):
+            return np.ctypeslib.as_array(val)
+        else:
+            return val
+
+    def __str__(self):
+        out = list()
+        for field in self._fields_:
+            name = field[0]
+            val = getattr(self, name)
+            if isinstance(val, ctypes.Structure):
+                # add one more recursion depth:
+                lst = []
+                for item in val._fields_:
+                    val2 = getattr(val, item[0])
+                    if isinstance(val2, ctypes.Structure):
+                        lst.append(str(val2))
+                    else:
+                        lst.append(val2)
+                out.append(lst)
+            else:
+                out.append(val)
+        return str(out)
+
+
+class LineCounter(MyStruct):
+    _pack_ = 1
+    _fields_ = [
+        ("Lin", ctypes.c_uint16),
+        ("Ave", ctypes.c_uint16),
+        ("Sli", ctypes.c_uint16),
+        ("Par", ctypes.c_uint16),
+        ("Eco", ctypes.c_uint16),
+        ("Phs", ctypes.c_uint16),
+        ("Rep", ctypes.c_uint16),
+        ("Set", ctypes.c_uint16),
+        ("Seg", ctypes.c_uint16),
+        ("Ida", ctypes.c_uint16),
+        ("Idb", ctypes.c_uint16),
+        ("Idc", ctypes.c_uint16),
+        ("Idd", ctypes.c_uint16),
+        ("Ide", ctypes.c_uint16)]
+
+class CutOff(MyStruct):
+    _pack_ = 1
+    _fields_ = [
+        ("Pre", ctypes.c_uint16),
+        ("Post", ctypes.c_uint16)]
+
+
+class SlicePos(MyStruct):
+    _pack_ = 1
+    _fields_ = [
+        ("Sag", ctypes.c_float),
+        ("Cor", ctypes.c_float),
+        ("Tra", ctypes.c_float)]
+
+
+class SliceData(MyStruct):
+    _pack_ = 1
+    _fields_ = [
+        ("SlicePos", SlicePos),
+        ("Quaternion", ctypes.c_float * 4)]
 
 
 # This is the VB line header
-vb17_header = [("FlagsAndDMALength", "<u4"),
-               ("MeasUID", "<i4"),
-               ("ScanCounter", "<u4"),
-               ("TimeStamp", "<u4"),
-               ("PMUTimeStamp", "<u4"),
-               ("EvalInfoMask", "<u8"),
-               ("SamplesInScan", "<u2"),
-               ("UsedChannels", "<u2"),
-               ("Counter", mdhLC),
-               ("CutOff", mdhCutOff),
-               ("CenterCol", "<u2"),
-               ("CoilSelect", "<u2"),
-               ("ReadOutOffcentre", "<f4"),
-               ("TimeSinceLastRF", "<u4"),
-               ("CenterLin", "<u2"),
-               ("CenterPar", "<u2"),
-               ("IceProgramPara", "<u2", 4),
-               ("FreePara", "<u2", 4),
-               ("SliceData", mdhSliceData),
-               ("ChannelId", "<u2"),
-               ("PTABPosNeg", "<u2")]
+class VB17_header(MyStruct):
+    _pack_=1
+    _fields_=[
+        ("FlagsAndDMALength", ctypes.c_uint32),
+        ("MeasUID", ctypes.c_int32),
+        ("ScanCounter", ctypes.c_uint32),
+        ("TimeStamp", ctypes.c_uint32),
+        ("PMUTimeStamp", ctypes.c_uint32),
+        ("EvalInfoMask", ctypes.c_uint64),
+        ("SamplesInScan", ctypes.c_uint16),
+        ("UsedChannels", ctypes.c_uint16),
+        ("Counter", LineCounter),
+        ("CutOff", CutOff),
+        ("CenterCol", ctypes.c_uint16),
+        ("CoilSelect", ctypes.c_uint16),
+        ("ReadOutOffcentre", ctypes.c_float),
+        ("TimeSinceLastRF", ctypes.c_uint32),
+        ("CenterLin", ctypes.c_uint16),
+        ("CenterPar", ctypes.c_uint16),
+        ("IceProgramPara", ctypes.c_uint16*4),
+        ("FreePara", ctypes.c_uint16*4),
+        ("SliceData", SliceData),
+        ("ChannelId", ctypes.c_uint16),
+        ("PTABPosNeg", ctypes.c_uint16)]
 
+    def __init__(self, **kwargs):
+        # initialize some fields with sane defaults
+        values = {"FlagsAndDMALength": ctypes.sizeof(self), "ScanCounter": 1}
+        values.update(kwargs)
+        super().__init__(**values)
 
 # VD/VE: One scan header for all channels
-scan_header = [("FlagsAndDMALength", "<u4"),
-               ("MeasUID", "<i4"),
-               ("ScanCounter", "<u4"),
-               ("TimeStamp", "<u4"),
-               ("PMUTimeStamp", "<u4"),
-               ("SystemType", "<u2"),
-               ("PTABPosDelay", "<u2"),
-               ("PTABPosX", "<i4"),
-               ("PTABPosY", "<i4"),
-               ("PTABPosZ", "<i4"),
-               ("Reserved1", "<i4"),
-               ("EvalInfoMask", "<u8"),
-               ("SamplesInScan", "<u2"),
-               ("UsedChannels", "<u2"),
-               ("Counter", mdhLC),
-               ("CutOff", mdhCutOff),
-               ("CenterCol", "<u2"),
-               ("CoilSelect", "<u2"),
-               ("ReadOutOffcentre", "<f4"),
-               ("TimeSinceLastRF", "<u4"),
-               ("CenterLin", "<u2"),
-               ("CenterPar", "<u2"),
-               ("SliceData", mdhSliceData),
-               ("IceProgramPara", "<u2", 24),
-               ("ReservedPara", "<u2", 4),
-               ("ApplicationCounter", "<u2"),
-               ("ApplicationMask", "<u2"),
-               ("CRC", "<u4")]
+class Scan_header(MyStruct):
+    _pack_=1
+    _fields_=[
+        ("FlagsAndDMALength", ctypes.c_uint32),
+        ("MeasUID", ctypes.c_int32),
+        ("ScanCounter", ctypes.c_uint32),
+        ("TimeStamp", ctypes.c_uint32),
+        ("PMUTimeStamp", ctypes.c_uint32),
+        ("SystemType", ctypes.c_uint16),
+        ("PTABPosDelay", ctypes.c_uint16),
+        ("PTABPosX", ctypes.c_int32),
+        ("PTABPosY", ctypes.c_int32),
+        ("PTABPosZ", ctypes.c_int32),
+        ("Reserved1", ctypes.c_int32),
+        ("EvalInfoMask", ctypes.c_uint64),
+        ("SamplesInScan", ctypes.c_uint16),
+        ("UsedChannels", ctypes.c_uint16),
+        ("Counter", LineCounter),
+        ("CutOff", CutOff),
+        ("CenterCol", ctypes.c_uint16),
+        ("CoilSelect", ctypes.c_uint16),
+        ("ReadOutOffcentre", ctypes.c_float),
+        ("TimeSinceLastRF", ctypes.c_uint32),
+        ("CenterLin", ctypes.c_uint16),
+        ("CenterPar", ctypes.c_uint16),
+        ("SliceData", SliceData),
+        ("IceProgramPara", ctypes.c_uint16*24),
+        ("ReservedPara", ctypes.c_uint16*4),
+        ("ApplicationCounter", ctypes.c_uint16),
+        ("ApplicationMask", ctypes.c_uint16),
+        ("CRC", ctypes.c_uint32)]
 
+    def __init__(self, **kwargs):
+        # initialize some fields with sane defaults
+        values = {"FlagsAndDMALength": ctypes.sizeof(self), "ScanCounter": 1}
+        values.update(kwargs)
+        super().__init__(**values)
 
 # VD/VE: One channel header per channel
-channel_header = [("TypeAndChannelLength", "<u4"),
-                  ("MeasUID", "<i4"),
-                  ("ScanCounter", "<u4"),
-                  ("Reserved1", "<i4"),
-                  ("SequenceTime", "<u4"),
-                  ("Unused2", "<u4"),
-                  ("ChannelId", "<u2"),
-                  ("Unused3", "<u2"),
-                  ("CRC", "<u4")]
+class Channel_header(MyStruct):
+    _pack_=1
+    _fields_=[
+        ("TypeAndChannelLength", ctypes.c_uint32),
+        ("MeasUID", ctypes.c_int32),
+        ("ScanCounter", ctypes.c_uint32),
+        ("Reserved1", ctypes.c_int32),
+        ("SequenceTime", ctypes.c_uint32),
+        ("Unused2", ctypes.c_uint32),
+        ("ChannelId", ctypes.c_uint16),
+        ("Unused3", ctypes.c_uint16),
+        ("CRC", ctypes.c_uint32)]
+    
+    # initialize some fields with sane defaults
+    def __init__(self, **kwargs):
+        values = { "ScanCounter": 1}
+        values.update(kwargs)
+        super().__init__(**values)
 
-vb17_hdr_type = np.dtype(vb17_header)
-scan_hdr_type = np.dtype(scan_header)
-channel_hdr_type = np.dtype(channel_header)
 
-
-mask_id = (
+mask_id=(
     'ACQEND',  # last scan
     'RTFEEDBACK',  # Realtime feedback scan
     'HPFEEDBACK',  # High perfomance feedback scan
@@ -166,7 +251,7 @@ mask_id = (
 )
 
 # create dict for faster access by name
-mask_dict = {item: key for key, item in enumerate(mask_id)}
+mask_dict={item: key for key, item in enumerate(mask_id)}
 
 
 # helper function (copied from mdb class)
@@ -177,8 +262,19 @@ def unpack_bits(infomask):
         infomask, 2**np.arange(64, dtype=np.uint64)).astype(bool)
 
 
+def get_dma_len(mdh):
+    return np.uint32(mdh.FlagsAndDMALength % (2**25))
+
+
+def set_dma_len(mdh, dma_len):
+    split = 2**25
+    if dma_len > split-1:
+        raise ValueError
+    mdh.FlagsAndDMALength = mdh.FlagsAndDMALength//split + dma_len
+
+
 def is_flag_set(mdh, flag):
-    return bool(int(mdh['EvalInfoMask']) & 1 << mask_dict[flag])
+    return bool(int(mdh.EvalInfoMask) & 1 << mask_dict[flag])
 
 
 def get_flag(mdh, flag):
@@ -193,15 +289,15 @@ def set_flag(mdh, flag, val):
 
 
 def add_flag(mdh, flag):
-    mdh['EvalInfoMask'] |= np.uint64(1 << mask_dict[flag])
+    mdh.EvalInfoMask |= (1 << mask_dict[flag])
 
 
 def remove_flag(mdh, flag):
-    mdh['EvalInfoMask'] &= ~np.uint64(1 << mask_dict[flag])
+    mdh.EvalInfoMask &= ~(1 << mask_dict[flag])
 
 
 def get_flags(mdh):
-    mask = unpack_bits(mdh['EvalInfoMask'])
+    mask=unpack_bits(mdh.EvalInfoMask)
     return dict(zip(mask_id, mask))
 
 
@@ -221,11 +317,11 @@ def set_flags(mdh, flags):
 
 
 def clear_all_flags(mdh):
-    mdh['EvalInfoMask'] = 0
+    mdh.EvalInfoMask=0
 
 
 def is_image_scan(mdh):
-    disqualifier = [
+    disqualifier=[
         'ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN',
         'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60']
     for name in disqualifier:

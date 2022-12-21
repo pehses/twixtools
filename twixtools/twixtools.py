@@ -154,7 +154,8 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
                 mdb = twixtools.mdb.Mdb(fid, version_is_ve)
             except:
                 print(f"WARNING: Mdb parsing encountered an error at file position {pos}/{scanEnd}, stopping here.")
-                break
+                raise ValueError
+                # break
 
             # jump to mdh of next scan
             pos += mdb.dma_len
@@ -225,22 +226,38 @@ def write_twix(scanlist, outfile, version_is_ve=True):
             # write mdbs
             for mdb in scan['mdb']:
                 # write mdh
-                mdb.mdh.tofile(fid)
-                data = np.atleast_2d(mdb.data)
+                fid.write(bytearray(mdb.mdh))
                 if version_is_ve:
                     if mdb.is_flag_set('SYNCDATA')\
                             or mdb.is_flag_set('ACQEND'):
-                        data.tofile(fid)
+                        fid.write(mdb.data)
+                        if mdb.is_flag_set('ACQEND')\
+                                and mdb is not scan['mdb'][-1]:
+                            print("WARNING: Early ACQEND detected, skipping some data during write.")
+                            break
                     else:
+                        data = np.atleast_2d(mdb.data)
                         for c in range(data.shape[0]):
                             # write channel header
-                            mdb.channel_hdr[c].tofile(fid)
+                            fid.write(bytearray(mdb.channel_hdr[c]))
                             # write data
                             data[c].tofile(fid)
                 else:  # WIP: VB version
-                    mdb.mdh.tofile(fid)
-                    # write data
-                    data[c].tofile(fid)
+                    data = np.atleast_2d(mdb.data)
+                    for c in range(data.shape[0]):
+                        fid.write(bytearray(mdb.mdh))
+                        data[c].tofile(fid)
+
+            if not mdb.is_flag_set('ACQEND'):
+                print("ACQEND missing at the end of the mdb list. Generating new one.")
+                acqend = twixtools.mdb.Mdb_local()
+                acqend.add_flag('ACQEND')
+                acqend.mdh.ScanCounter = mdb.mdh.ScanCounter + 1
+                acqend.mdh.TimeMeasUID = mdb.mdh.MeasUID
+                acqend.mdh.TimeStamp = mdb.mdh.TimeStamp
+                acqend.mdh.PMUTimeStamp = mdb.mdh.PMUTimeStamp
+                fid.write(bytearray(acqend.mdh))
+                fid.write(acqend.data)
 
             # update scan_len
             scan_len.append(fid.tell() - scan_pos[-1])
@@ -306,9 +323,9 @@ def fix_scancounters(mdb_list, start_cnt=1):
     for mdb in mdb_list:
         if mdb.is_flag_set('SYNCDATA'):  # ignore SYNCDATA
             continue
-        mdb.mdh['ScanCounter'] = cnt
+        mdb.mdh.ScanCounter = cnt
         for cha in mdb.channel_hdr:
-            cha['ScanCounter'] = cnt
+            cha.ScanCounter = cnt
         cnt += 1
 
 

@@ -184,6 +184,10 @@ class Mdb_local(Mdb_base):
         return self.__data
 
     def _set_data(self, value):
+        if isinstance(value, bytes):
+            self.__data = value
+            mdh_def.set_dma_len(self.mdh, self.dma_len)
+            return    
         if value.ndim > 2:
             raise ValueError
         self.__data = np.complex64(np.atleast_2d(value))
@@ -196,15 +200,14 @@ class Mdb_local(Mdb_base):
         self.mdh.SamplesInScan = ncol
         self.mdh.UsedChannels = ncha
         mdh_def.set_dma_len(self.mdh, self.dma_len)
-        if not self.is_flag_set('ACQEND') and not self.is_flag_set('SYNCDATA'):
-            pass
         if self.version_is_ve:
-            if self.channel_hdr is None or len(self.channel_hdr) < ncha:
-                self.channel_hdr = mdh_def.Channel_header
-            for c in range(ncha):
-                if c >= len(self.channel_hdr):
-                    self.channel_hdr.append(self.channel_hdr[0])
-                self.channel_hdr[c].ChannelId = c
+            if len(self.channel_hdr) < ncha:
+                if len(self.channel_hdr) == 0:
+                    self.channel_hdr.append(mdh_def.Channel_header())
+                for c in range(ncha):
+                    if c >= len(self.channel_hdr):
+                        self.channel_hdr.append(self.channel_hdr[0])
+                    self.channel_hdr[c].ChannelId = c
             del(self.channel_hdr[ncha:])
 
 

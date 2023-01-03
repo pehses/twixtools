@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import ctypes
 import copy
 
@@ -18,7 +17,7 @@ class Mdb_base(object):
 
     def __str__(self):
         """Convert to string, for str()."""
-        return ( f"{self.__class__.__module__}.{self.__class__.__qualname__}:\n"
+        return (f"{self.__class__.__module__}.{self.__class__.__qualname__}:\n"
                 f"  ScanCounter: {self.mdh.ScanCounter}\n"
                 f"  TimeStamp / PMUTimeStamp: {self.mdh.TimeStamp} / {self.mdh.PMUTimeStamp}\n"
                 f"  Active Flags: {self.get_active_flags()}\n"
@@ -29,7 +28,7 @@ class Mdb_base(object):
                 f"  CenterCol: {self.mdh.CenterCol}\n"
                 f"  CenterLin: {self.mdh.CenterLin}\n"
                 f"  CenterPar: {self.mdh.CenterPar}\n"
-                 "  Counter:\n"
+                f"  Counter:\n"
                 f"    Lin: {self.mdh.Counter.Lin}\n"
                 f"    Par: {self.mdh.Counter.Par}\n"
                 f"    Sli: {self.mdh.Counter.Sli}\n"
@@ -45,7 +44,7 @@ class Mdb_base(object):
                 f"  SliceData:\n"
                 f"    SlicePos:   {self.mdh.SliceData.SlicePos}\n"
                 f"    Quaternion: {self.mdh.SliceData.Quaternion}"
-        )
+                )
 
     def _get_data_len(self):
         return np.uint32(8 * self.mdh.SamplesInScan)
@@ -187,7 +186,7 @@ class Mdb_local(Mdb_base):
         if isinstance(value, bytes):
             self.__data = value
             mdh_def.set_dma_len(self.mdh, self.dma_len)
-            return    
+            return
         if value.ndim > 2:
             raise ValueError
         self.__data = np.complex64(np.atleast_2d(value))
@@ -208,7 +207,7 @@ class Mdb_local(Mdb_base):
                     if c >= len(self.channel_hdr):
                         self.channel_hdr.append(self.channel_hdr[0])
                     self.channel_hdr[c].ChannelId = c
-            del(self.channel_hdr[ncha:])
+            del (self.channel_hdr[ncha:])
 
 
 class Mdb(Mdb_base):

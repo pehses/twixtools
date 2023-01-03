@@ -1,6 +1,4 @@
 import numpy as np
-import time
-import sys
 
 
 class ObservableDict(dict):
@@ -37,4 +35,3 @@ def idea_version_check(f):
     f.seek(prev_pos)
 
     return version_is_ve, NScans
-

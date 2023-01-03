@@ -1,5 +1,7 @@
 # twixtools
 
+[![Python package](https://github.com/pehses/twixtools/actions/workflows/test_action.yml/badge.svg)](https://github.com/pehses/twixtools/actions/workflows/test_action.yml)
+
 ### Purpose
 
 twixtools provide reading and limited writing capability of Siemens MRI raw data files (.dat). In addition, it also includes the compression utility twixzip (see further below for a description).

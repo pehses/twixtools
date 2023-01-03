@@ -69,6 +69,7 @@ class LineCounter(MyStruct):
         ("Idd", ctypes.c_uint16),
         ("Ide", ctypes.c_uint16)]
 
+
 class CutOff(MyStruct):
     _pack_ = 1
     _fields_ = [
@@ -93,8 +94,8 @@ class SliceData(MyStruct):
 
 # This is the VB line header
 class VB17_header(MyStruct):
-    _pack_=1
-    _fields_=[
+    _pack_ = 1
+    _fields_ = [
         ("FlagsAndDMALength", ctypes.c_uint32),
         ("MeasUID", ctypes.c_int32),
         ("ScanCounter", ctypes.c_uint32),
@@ -123,10 +124,11 @@ class VB17_header(MyStruct):
         values.update(kwargs)
         super().__init__(**values)
 
+
 # VD/VE: One scan header for all channels
 class Scan_header(MyStruct):
-    _pack_=1
-    _fields_=[
+    _pack_ = 1
+    _fields_ = [
         ("FlagsAndDMALength", ctypes.c_uint32),
         ("MeasUID", ctypes.c_int32),
         ("ScanCounter", ctypes.c_uint32),
@@ -162,10 +164,11 @@ class Scan_header(MyStruct):
         values.update(kwargs)
         super().__init__(**values)
 
+
 # VD/VE: One channel header per channel
 class Channel_header(MyStruct):
-    _pack_=1
-    _fields_=[
+    _pack_ = 1
+    _fields_ = [
         ("TypeAndChannelLength", ctypes.c_uint32),
         ("MeasUID", ctypes.c_int32),
         ("ScanCounter", ctypes.c_uint32),
@@ -175,15 +178,15 @@ class Channel_header(MyStruct):
         ("ChannelId", ctypes.c_uint16),
         ("Unused3", ctypes.c_uint16),
         ("CRC", ctypes.c_uint32)]
-    
+
     # initialize some fields with sane defaults
     def __init__(self, **kwargs):
-        values = { "ScanCounter": 1}
+        values = {"ScanCounter": 1}
         values.update(kwargs)
         super().__init__(**values)
 
 
-mask_id=(
+mask_id = (
     'ACQEND',  # last scan
     'RTFEEDBACK',  # Realtime feedback scan
     'HPFEEDBACK',  # High perfomance feedback scan
@@ -251,7 +254,7 @@ mask_id=(
 )
 
 # create dict for faster access by name
-mask_dict={item: key for key, item in enumerate(mask_id)}
+mask_dict = {item: key for key, item in enumerate(mask_id)}
 
 
 # helper function (copied from mdb class)
@@ -297,7 +300,7 @@ def remove_flag(mdh, flag):
 
 
 def get_flags(mdh):
-    mask=unpack_bits(mdh.EvalInfoMask)
+    mask = unpack_bits(mdh.EvalInfoMask)
     return dict(zip(mask_id, mask))
 
 
@@ -317,11 +320,11 @@ def set_flags(mdh, flags):
 
 
 def clear_all_flags(mdh):
-    mdh.EvalInfoMask=0
+    mdh.EvalInfoMask = 0
 
 
 def is_image_scan(mdh):
-    disqualifier=[
+    disqualifier = [
         'ACQEND', 'RTFEEDBACK', 'HPFEEDBACK', 'SYNCDATA', 'REFPHASESTABSCAN',
         'PHASESTABSCAN', 'PHASCOR', 'NOISEADJSCAN', 'noname60']
     for name in disqualifier:

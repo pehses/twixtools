@@ -249,7 +249,7 @@ class twix_array():
 
         for mdb in self.mdb_list:
             counter = mdb.mdh.Counter
-            
+
             counter = np.asarray([getattr(counter, key) for key in self.sorted_mdh_keys], dtype=int)
             req_shape = 1 + counter
             # add channels & columns
@@ -306,9 +306,9 @@ class twix_array():
 
     def __str__(self):
         """Convert to string, for str()."""
-        s  = f"\n{self.__class__.__module__}.{self.__class__.__qualname__}:"
-        s +=  "\n  hdr: dict with header info"
-        s +=  "\n  mdb_list: list of Mdb objects"
+        s = f"\n{self.__class__.__module__}.{self.__class__.__qualname__}:"
+        s += "\n  hdr: dict with header info"
+        s += "\n  mdb_list: list of Mdb objects"
         s += f"\n  shape: {self.shape}"
         s += f"\n  dims: {self.dims}"
         s += f"\n  kspace_center_col: {self.kspace_center_col}"
@@ -316,7 +316,7 @@ class twix_array():
         s += f"\n  kspace_center_par: {self.kspace_center_par}"
         s += f"\n  fft_scale: {self.fft_scale}"
         s += f"\n  rawdata_corrfactors: {self.rawdata_corrfactors}"
-        s +=  "\n  flags:"
+        s += "\n  flags:"
         for key, item in self.flags.items():
             s += f"\n    {key}: {item}"
         return s
@@ -376,7 +376,7 @@ class twix_array():
                 hdr_lin = \
                     self.hdr['MeasYaps']['sKSpace']['lPhaseEncodingLines']
                 sz['Lin'] = max(sz['Lin'], hdr_lin)
-                    
+
             if not self.flags['average']['Par']\
                     and self.hdr['MeasYaps']['sKSpace']['ucDimension'] > 2:
                 hdr_par = self.hdr['MeasYaps']['sKSpace']['lPartitions']
@@ -424,21 +424,21 @@ class twix_array():
         if coilname.lower() == 'nova_ptx':
             self.fft_scale = np.array([
                 1.024957, 0.960428, 0.991236, 1.037026, 1.071855, 1.017678,
-                1.02946 , 1.026439, 1.083618, 1.124822, 1.169501, 1.148701,
+                1.029460, 1.026439, 1.083618, 1.124822, 1.169501, 1.148701,
                 1.220159, 1.211465, 1.212671, 1.160536, 1.072906, 1.049849,
                 1.046032, 1.018297, 1.024308, 0.975085, 0.977127, 0.975455,
-                0.966018, 0.945748, 0.943535, 0.964435, 1.009673, 0.9225  ,
+                0.966018, 0.945748, 0.943535, 0.964435, 1.009673, 0.922500,
                 0.962792, 0.935691])
             self.rawdata_corrfactors = np.array([
-                -7.869929+3.80047j , -7.727324+4.071778j, -7.88741 +3.761298j,
+                -7.869929+3.800470j, -7.727324+4.071778j, -7.887410+3.761298j,
                 -7.746147+4.034059j, -7.905413+3.721748j, -7.681937+3.962719j,
                 -7.869919+3.756741j, -7.708525+3.898736j, -7.344962+4.680127j,
-                -7.219433+4.857659j, -7.362616+4.62574j , -7.207232+4.834069j,
-                -7.335363+4.60201j , -7.103662+4.94855j , -7.339441+4.680904j,
+                -7.219433+4.857659j, -7.362616+4.625740j, -7.207232+4.834069j,
+                -7.335363+4.602010j, -7.103662+4.948550j, -7.339441+4.680904j,
                 -7.114415+4.918804j, -7.366599+4.685465j, -7.150412+4.849619j,
-                -7.338072+4.695826j, -7.179264+4.87732j , -7.334629+4.790239j,
+                -7.338072+4.695826j, -7.179264+4.877320j, -7.334629+4.790239j,
                 -7.097607+4.900652j, -7.325254+4.716376j, -7.147962+4.788579j,
-                -7.354259+4.671206j, -7.1664  +4.843273j, -7.292011+4.672282j,
+                -7.354259+4.671206j, -7.166400+4.843273j, -7.292011+4.672282j,
                 -7.171817+4.863891j, -7.357615+4.663175j, -7.049273+4.926576j,
                 -7.300245+4.660961j, -6.767411+4.967862j])
         else:
@@ -540,11 +540,11 @@ class twix_array():
         ave_counter = np.zeros(np.prod(out.shape[:-2]), dtype=np.uint16)
 
         fft_scale = 1
-        if self.flags['apply_fftscale'] and not all(self.fft_scale==1):
+        if self.flags['apply_fftscale'] and not all(self.fft_scale == 1):
             corr_factor = self.fft_scale[:, np.newaxis]
-        
+
         rawdata_corrfactor = 1
-        if self.flags['apply_rawdatacorr'] and not all(self.rawdata_corrfactors==1):
+        if self.flags['apply_rawdatacorr'] and not all(self.rawdata_corrfactors == 1):
             rawdata_corrfactor = self.rawdata_corrfactors[:, np.newaxis]
 
         # now that we have our selection, we can read the data
@@ -566,7 +566,6 @@ class twix_array():
                 Counter.Par += self.par_offset
 
             counters = [getattr(Counter, key) for key in Counter_sel]
-
 
             # check if we have to read this mdb
             do_not_read = False

@@ -17,8 +17,8 @@ class Geometry:
 
     During initialization, information about slice geometry is copied from the supplied twix dict.
     Methods for conversion between the different coordinate systems
-    Patient Coordinate System (PCS; Sag/Cor/Tra), Device Coordinate System (XYZ) and Gradient Coordinate System (GCS or PRS; Phase,Readout,Slice)
-    are implemented (so far only rotation, i.e. won't work for offcenter measurementes).
+    Patient Coordinate System (PCS; Sag/Cor/Tra), Device Coordinate System (XYZ) and Gradient Coordinate System
+    (GCS or PRS; Phase, Readout, Slice) are implemented (so far only rotation, i.e. won't work for offcenter measurementes).
 
     Examples
     ----------

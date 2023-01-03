@@ -147,15 +147,13 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
 
         if verbose:
             print('Scan ', s)
-            progress_bar = tqdm(total = scanEnd - pos, unit='B', unit_scale=True, unit_divisor=1024)
+            progress_bar = tqdm(total=scanEnd - pos, unit='B', unit_scale=True, unit_divisor=1024)
         while pos + 128 < scanEnd:  # fail-safe not to miss ACQEND
             fid.seek(pos, os.SEEK_SET)
             try:
                 mdb = twixtools.mdb.Mdb(fid, version_is_ve)
-            except:
+            except ValueError:
                 print(f"WARNING: Mdb parsing encountered an error at file position {pos}/{scanEnd}, stopping here.")
-                raise ValueError
-                # break
 
             # jump to mdh of next scan
             pos += mdb.dma_len

@@ -27,7 +27,7 @@ def remove_oversampling(data, x_was_in_timedomain=True):
     return data, x_in_timedomain
 
 
-def calc_regrid_traj(prot):
+def calc_regrid_traj(prot, ncol=None):
 
     meas = prot['Meas']
 
@@ -35,7 +35,8 @@ def calc_regrid_traj(prot):
         return None
 
     regrid_mode = meas['alRegridMode'][0]
-    ncol = meas['alRegridDestSamples'][0]
+    if ncol is None:
+        ncol = meas['alRegridDestSamples'][0]
     dwelltime = meas['aflRegridADCDuration'][0] / ncol
     start = meas['alRegridDelaySamplesTime'][0]
     rampup_time = meas['alRegridRampupTime'][0]

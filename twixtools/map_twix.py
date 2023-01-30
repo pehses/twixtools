@@ -214,7 +214,9 @@ class twix_array():
         if hdr is not None:
             self.hdr = copy.deepcopy(hdr)
 
-        self.rs_traj = calc_regrid_traj(self.hdr)
+        # use the data column for traj calculation
+        ncol = mdb_list[0].data.shape[-1]
+        self.rs_traj = calc_regrid_traj(self.hdr, ncol=ncol)
 
         # delete 'ACQEND' and 'SYNCDATA' flags if present
         twixtools.del_from_mdb_list(

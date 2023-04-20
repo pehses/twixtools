@@ -567,6 +567,15 @@ class twix_array():
                 Counter.Lin += self.lin_offset
                 Counter.Par += self.par_offset
 
+            # When the Line Counter (Counter.Lin) is not smaller than its shape,
+            # the data will be stored in the front, and may cause problems.
+            if Counter.Lin >= self_shape[-3]:
+                continue
+
+            if Counter.Par >= self_shape[-5]:
+                continue
+
+
             counters = [getattr(Counter, key) for key in Counter_sel]
 
             # check if we have to read this mdb

@@ -8,7 +8,6 @@ twixtools: provides reading and limited writing capability of Siemens MRI raw
 import os
 import re
 import numpy as np
-from pathlib import Path
 from tqdm import tqdm
 
 import twixtools.twixprot as twixprot
@@ -55,7 +54,7 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
     if isinstance(infile, str):
         # assume that complete path is given
         # check if filepath contains an extension
-        if len(Path(infile).suffix) == 0:
+        if len(os.path.splitext(infile)[1]) == 0:
             infile += '.dat'   # adds filetype ending to file
     else:
         # filename not a string, so assume that it is the MeasID

@@ -52,7 +52,10 @@ def try_cast(value, key):
             pass
     elif key.startswith('uc'):
         try:
-            value = int(value, 16)
+            if value.startswith('0x'):
+                value = int(value, 16)
+            else:
+                value = int(value)
         except ValueError:
             pass
     else:  # try to convert everything else to float

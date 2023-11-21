@@ -23,12 +23,13 @@ if args.keys and 'h' == selected_keys[0]:
 
 for i, twix_i in enumerate(twix):
 
-    del_keys = []
+    if args.keys:
+        for key in selected_keys:
+            if not key in twix_i['hdr'].keys():
+                print(f"Requested key {key} not found in twix header no. {i}", file=sys.stderr)
+                sys.exit(1)
 
-    for key in selected_keys:
-        if not key in twix_i['hdr'].keys():
-            print(f"Requested key {key} not found in twix header no. {i}", file=sys.stderr)
-            sys.exit(1)
+    del_keys = []
 
     for key in twix_i['hdr']:
         if "_raw" in key:

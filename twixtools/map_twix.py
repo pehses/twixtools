@@ -278,7 +278,7 @@ class twix_array():
                        'user_func': list()}
 
         # 'Ave' should be averaged by default, Idx indices should be ignored:
-        for dim in ['Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Seg', 'Ave']:
+        for dim in ['Seg', 'Ave']:
             self._flags['average'][dim] = True
 
         # set flags that were passed in constructor call

@@ -98,30 +98,39 @@ class Geometry:
         self.rotmatrix = self.rps_to_xyz().tolist()
 
     def get_plane_orientation(self):
+        # sanity check if normal vector is unit vector
         norm = np.linalg.norm(self.normal)
         if not abs(1 - norm) < 0.001:
             raise RuntimeError(f"Normal vector is not normal: |x| = {norm}")
 
+        # find main direction of normal vector for first part of rot matrix
         maindir = np.argmax(np.abs(self.normal))
-        if 0 == maindir:
-            mat = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]  # @ mat // inplane mat
-        if 1 == maindir:
-            mat = [[0, 1, 0], [0, 0, 1], [1, 0, 0]]
-        if 2 == maindir:
-            mat = np.eye(3)
+        if maindir == 0:
+            init_mat = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]  # @ mat // inplane mat
+        elif maindir == 1:
+            init_mat = [[0, 1, 0], [0, 0, 1], [1, 0, 0]]
+        else:
+            init_mat = np.eye(3)
 
+        # initialize normal vector direction to which to compute the second part of rotation matrix
         init_normal = np.zeros(3)
         init_normal[maindir] = 1
 
+        # calculate cross product and sine, cosine
         v = np.cross(init_normal, self.normal)
         s = np.linalg.norm(v)
         c = np.dot(init_normal, self.normal)
 
         if s <= 0.00001:
-            mat = np.eye(3) * c @ mat
+            # we have cosine 1 or -1, two vectors are (anti-) parallel
+            mat = np.matmul(np.eye(3) * c, init_mat)
         else:
-            V = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-            mat = (np.eye(3) + V + V * V * (1 - c) / s ** 2) @ mat
+            # calculate cross product matrix
+            v_x = np.cross(np.eye(3), v)
+            # calculate rotation matrix, division should be possible from excluding c = -1 above
+            mat = np.eye(3) + v_x + np.divide(np.matmul(v_x, v_x), 1 + c)
+            # calculate full rotation matrix
+            mat = np.matmul(mat, init_mat)
 
         return mat
 

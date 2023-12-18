@@ -53,7 +53,7 @@ class Geometry:
             self.dims = None
 
         if len(twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"]) > 1:
-            print("WARNING more than one slice. Taking first one..")
+            print("WARNING: Geometry calculations are valid only for the first slice in this multi-slice acquisition.")
 
         self.fov = [
             twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dReadoutFOV"]

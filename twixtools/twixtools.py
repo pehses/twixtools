@@ -93,6 +93,12 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
         measOffset = list()
         measLength = list()
         for k in range(NScans):
+            if raidfile_hdr['entry'][k]['len_'] == 0:
+                if NScans == 1:
+                    raidfile_hdr['entry'][0]['len_'] = fileSize - raidfile_hdr['entry'][0]['off_']
+                    print('WARNING: raidfile_hdr of single-raidfile has length 0; determing length from file size')
+                else:
+                    print(f'WARNING: raidfile_hdr entry {k} has length 0')
             measOffset.append(raidfile_hdr['entry'][k]['off_'])
             measLength.append(raidfile_hdr['entry'][k]['len_'])
     else:
@@ -131,14 +137,18 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
             fid.seek(pos, os.SEEK_SET)
             hdr = twixprot.parse_twix_hdr(fid)
             out[-1]['hdr'] = hdr
-            fid.seek(pos, os.SEEK_SET)
-            out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
+        fid.seek(pos, os.SEEK_SET)
+        out[-1]['hdr_str'] = np.fromfile(fid, dtype="<S1", count=hdr_len)
 
         if version_is_ve:
             out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
 
         if parse_geometry:
-            out[-1]['geometry'] = twixtools.geometry.Geometry(out[-1])
+            if not parse_prot:
+                print('WARNING: geometry parsing requires protocol parsing, skipping geometry parsing')
+                parse_geometry = False
+            else:
+                out[-1]['geometry'] = twixtools.geometry.Geometry(out[-1])
 
         # if data is not requested (headers only)
         if not parse_data:

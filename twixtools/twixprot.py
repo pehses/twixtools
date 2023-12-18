@@ -22,6 +22,9 @@ def parse_twix_hdr(file):
     for _ in range(n_buffer):
         tmp = file.read(48)
         matches = re.search(pattern, tmp, re.DOTALL)
+        if matches is None:
+            print("WARNING: Error parsing twix header")
+            break
         name = matches.group(1).decode('latin1')
         buf_len = struct.unpack('<I', matches.group(2))[0]
         pos += len(matches.group())

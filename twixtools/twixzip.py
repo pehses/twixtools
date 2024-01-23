@@ -366,7 +366,7 @@ def compress_twix(
 ):
 
     with suppress_stdout_stderr():
-        twix = twixtools.read_twix(infile, keep_syncdata_and_acqend=True)
+        twix = twixtools.read_twix(infile, keep_acqend=True)
 
     import tables
     import pyzfp

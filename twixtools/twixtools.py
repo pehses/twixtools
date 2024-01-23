@@ -18,7 +18,8 @@ import twixtools.geometry
 
 
 def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
-              parse_geometry=True, verbose=True, keep_syncdata_and_acqend=False):
+              parse_geometry=True, verbose=True, keep_acqend=False, keep_syncdata=True,
+              keep_syncdata_and_acqend=None):
     """Function for reading siemens twix raw data files.
 
     Parameters
@@ -36,9 +37,14 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
         coordinates to physical coordinates.
     verbose: bool, optional
         Switch progress and other messages on or off.
+    keep_acqend : bool, optional
+        By default, acqend blocks are not included in the mdb list.
+        This block is helpful for twix writing, but unnecessary otherwise.
+    keep_syncdata : bool, optional
+        By default, syncdata blocks are included in the mdb list.
+        These blocks may include physio. (PMU) or trajectory information.
     keep_syncdata_and_acqend : bool, optional
-        By default, syncdata and acqend blocks are not included in the mdb list.
-        These blocks are helpful for twix writing, but unnecessary otherwise.
+        Legacy option, will be removed in future versions.
 
     Returns
     -------
@@ -51,6 +57,13 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
             - geometry: dict containing geometry information about the scan
               use `help(twixtools.geometry)` for more information
     """
+
+    if keep_syncdata_and_acqend is not None:
+        print('WARNING: keep_syncdata_and_acqend is deprecated, use keep_syncdata and keep_acqend instead')
+        print('Overwriting keep_syncdata and keep_acqend with value of keep_syncdata_and_acqend')
+        keep_syncdata = keep_syncdata_and_acqend
+        keep_acqend = keep_syncdata_and_acqend
+
     if isinstance(infile, str):
         # assume that complete path is given
         # check if filepath contains an extension
@@ -171,16 +184,16 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
             if verbose:
                 progress_bar.update(mdb.dma_len)
 
-            if not keep_syncdata_and_acqend:
+            if not keep_syncdata:
                 if mdb.is_flag_set('SYNCDATA'):
                     continue
-                elif mdb.is_flag_set('ACQEND'):
-                    break
-
-            out[-1]['mdb'].append(mdb)
 
             if mdb.is_flag_set('ACQEND'):
+                if keep_acqend:
+                    out[-1]['mdb'].append(mdb)
                 break
+
+            out[-1]['mdb'].append(mdb)
 
         if verbose:
             progress_bar.close()

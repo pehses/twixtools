@@ -298,11 +298,11 @@ def get_cal_data(meas, remove_os):
         cal_nx = np.asarray(cal_nx)
         cal_nc = np.asarray(cal_nc)
         if cal_isima.sum() >= 16:
-            mode_x = scipy.stats.mode(cal_nx[cal_isima]).mode[0]
-            mode_c = scipy.stats.mode(cal_nc[cal_isima]).mode[0]
+            mode_x = scipy.stats.mode(cal_nx[cal_isima]).mode
+            mode_c = scipy.stats.mode(cal_nc[cal_isima]).mode
         else:
-            mode_x = scipy.stats.mode(cal_nx).mode[0]
-            mode_c = scipy.stats.mode(cal_nc).mode[0]
+            mode_x = scipy.stats.mode(cal_nx).mode
+            mode_c = scipy.stats.mode(cal_nc).mode
         mask = (cal_nx == mode_x) & (cal_nc == mode_c)
         cal_list = cal_list[mask]
         cal_isima = cal_isima[mask]

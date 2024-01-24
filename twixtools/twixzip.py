@@ -303,6 +303,12 @@ def get_cal_data(meas, remove_os):
         else:
             mode_x = scipy.stats.mode(cal_nx).mode
             mode_c = scipy.stats.mode(cal_nc).mode
+        # scipy.stats.mode recently changed the return type, so we need to 
+        # account for new and old behavior
+        if not np.isscalar(mode_x):
+            mode_x = mode_x[0]
+        if not np.isscalar(mode_c):
+            mode_c = mode_c[0]
         mask = (cal_nx == mode_x) & (cal_nc == mode_c)
         cal_list = cal_list[mask]
         cal_isima = cal_isima[mask]

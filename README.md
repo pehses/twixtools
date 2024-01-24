@@ -116,6 +116,8 @@ Optional flags control additional feature and also have an impact on size and sh
   * `skip_empty_lead`: skips to first line & partition that is found in mdb list (e.g. if first line counter is 10, the output array starts at line counter 10).
   * `zf_missing_lines`: zero-fill k-space to include lines and partitions that are higher than the maximum counter found in the mdb list, but are still within the k-space matrix according to the twix header.
 
+If available, physiological (PMU) data is stored in the returned dict under the 'pmu' key.
+
 For example code, please look at the `demo/recon_example.ipynb` jupyter file.
 
 ## twixzip Compression Utility

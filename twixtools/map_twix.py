@@ -4,6 +4,7 @@ import twixtools
 from twixtools.recon_helpers import (
     remove_oversampling, calc_regrid_traj, perform_regrid
 )
+from twixtools.pmu import PMU
 
 
 # define categories in which the twix data should be sorted based on MDH flags
@@ -61,13 +62,16 @@ def map_twix(input, verbose=True):
 
     Returns:
     ----------
-    out: dict of twix_array objects
-        A twix_array object is created for each data category (as defined by
-        `twix_category`) that is encountered in the input.
-        The twix_array object includes the header information (twix_array.hdr)
-        as well as access to the underlying data via array slicing of a virtual
-        'k-space'-like array that is designed to closely mimick a
-        `numpy.ndarray` object (and indeed returns a `numpy.ndarray`).
+    out: dict that includes
+        - twix_array objects
+            A twix_array object is created for each data category (as defined by
+            `twix_category`) that is encountered in the input.
+            The twix_array object includes the header information (twix_array.hdr)
+            as well as access to the underlying data via array slicing of a virtual
+            'k-space'-like array that is designed to closely mimick a
+            `numpy.ndarray` object (and indeed returns a `numpy.ndarray`).
+        - hdr information: dict
+        - physiological (pmu) data: PMU object
 
     Examples:
     ----------
@@ -98,6 +102,12 @@ def map_twix(input, verbose=True):
     >>> im_data0 = im_array[...,0,:]
 
     All standard array slicing operations should be supported.
+
+
+    If the twix file includes physiological data, it can be accessed via:
+    >>> pmu = twix['pmu']
+    >>> print(pmu.signal.keys())  # print available physiological signals
+    >>> plt.plot(pmu.timestamp('PULS'), pmu.signal['PULS'])  # plot PULS signal
     """
 
     if isinstance(input, list):
@@ -155,6 +165,9 @@ def map_twix(input, verbose=True):
         # include hdr in dict
         out[-1]['hdr'] = meas['hdr'].copy()
         out[-1]['hdr_str'] = meas['hdr_str'].copy()
+
+        # append PMU data
+        out[-1]['pmu'] = PMU(meas['mdb'])
 
     # go back to dict if input was dict
     if isinstance(input, dict):
@@ -569,7 +582,7 @@ class twix_array():
 
             # When the Line Counter (Counter.Lin) is not smaller than its shape,
             # the data will be stored in the front, and may cause problems.
-            if Counter.Lin >= self_shape[-3] or Counter.Par >= self_shape[-6]:
+            if Counter.Lin >= self_shape[-3] or Counter.Par >= self_shape[-5]:
                 continue
 
             counters = [getattr(Counter, key) for key in Counter_sel]

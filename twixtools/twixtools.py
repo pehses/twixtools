@@ -60,7 +60,7 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
 
     if keep_syncdata_and_acqend is not None:
         print('WARNING: keep_syncdata_and_acqend is deprecated, use keep_syncdata and keep_acqend instead')
-        print('Overwriting keep_syncdata and keep_acqend with value of keep_syncdata_and_acqend')
+        print('         Setting keep_syncdata and keep_acqend to %s.' % {keep_syncdata_and_acqend})
         keep_syncdata = keep_syncdata_and_acqend
         keep_acqend = keep_syncdata_and_acqend
 

@@ -43,6 +43,7 @@ The function returns a list of individual measurements (of length >=1). The last
 * 'hdr': dict of parsed protocol header strings (each dict element contains another dict with protocol information)
 * 'hdr_str': dict of original protocol header strings (divided into different protocol types)
   - note that this is the protocol information that is used for twix file writing (by `write_twix`), so make sure to make necessary adjustments here and not in ['hdr']
+* 'pmu': physiological (PMU) data (if available and parse_pmu is set to True)
 * ('raidfile_hdr': required for twix file writing, otherwise of little importance)
 
 

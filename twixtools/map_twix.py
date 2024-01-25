@@ -4,7 +4,6 @@ import twixtools
 from twixtools.recon_helpers import (
     remove_oversampling, calc_regrid_traj, perform_regrid
 )
-from twixtools.pmu import PMU
 
 
 # define categories in which the twix data should be sorted based on MDH flags
@@ -167,7 +166,8 @@ def map_twix(input, verbose=True):
         out[-1]['hdr_str'] = meas['hdr_str'].copy()
 
         # append PMU data
-        out[-1]['pmu'] = PMU(meas['mdb'])
+        if 'pmu' in meas:
+            out[-1]['pmu'] = meas['pmu']
 
     # go back to dict if input was dict
     if isinstance(input, dict):

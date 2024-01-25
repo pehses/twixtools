@@ -15,9 +15,10 @@ import twixtools.helpers as helpers
 import twixtools.mdb
 import twixtools.hdr_def as hdr_def
 import twixtools.geometry
+from twixtools.pmu import PMU
 
 
-def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
+def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, parse_pmu=True,
               parse_geometry=True, verbose=True, keep_acqend=False, keep_syncdata=True,
               keep_syncdata_and_acqend=None):
     """Function for reading siemens twix raw data files.
@@ -32,6 +33,8 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
         (this is also highly recommended)
     parse_data: bool, optional
         Set to False to parse only protocol information.
+    parse_pmu: bool, optional
+        Set to False to ignore physiological (PMU) data.
     parse_geometry: bool, optional
         Set to False to skip creation of transformation matrix from data
         coordinates to physical coordinates.
@@ -155,6 +158,12 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True,
 
         if version_is_ve:
             out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
+
+        if parse_pmu:
+            # parse PMU data
+            pmu = PMU(out[-1]['mdb'])
+            if len(pmu.signal) > 0:
+                out[-1]['pmu'] = pmu
 
         if parse_geometry:
             if not parse_prot:

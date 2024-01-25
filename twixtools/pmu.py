@@ -105,7 +105,7 @@ class PMU():
                 f"  .trigger: dict of triggers for each channel\n"
                 f"  .timestamp: dict of timestamps for each channel")
 
-    def plot(self, keys=None, show_trigger=True, x_axis_in_s=True):
+    def plot(self, keys=None, show_trigger=True):
 
         if keys is None:
             keys = list(self.signal.keys())
@@ -118,40 +118,28 @@ class PMU():
                 print('No trigger signals found')
                 show_trigger = False
 
-        if x_axis_in_s:
-            t0 = self.get_time(keys[0])[0]
-
-        n_plots = 1 + bool(show_trigger)
-
-        plt.subplot(n_plots, 1, 1)
+        _, axs = plt.subplots(1 + bool(show_trigger), 1, squeeze=False, sharex=True)
+        print('axs.shape = ', axs.shape)
         colors = dict()
         for key in keys:
-            if x_axis_in_s:
-                x = self.get_time(key) - t0
-            else:
-                x = self.timestamp[key]
-            plt.plot(x, self.signal[key], label=key)
-            colors[key] = plt.gca().lines[-1].get_color()
+            axs[0, 0].plot(self.timestamp[key], self.signal[key], label=key)
+            colors[key] = axs[0, 0].lines[-1].get_color()
 
-        plt.ylabel('normalized signal')
-        plt.legend()
+        axs[-1, 0].set_xlabel('timestamp [2.5 us ticks from midnight]')
+        axs[0, 0].set_ylabel('normalized signal')
+        axs[0, 0].legend()
+
+        # add secondary x-axis with time in seconds
+        t0 = self.get_time(keys[0])[0]
+        secax = axs[0, 0].secondary_xaxis('top', functions=(lambda x: x*2.5e-3 - t0, lambda x: (x + t0) / 2.5e-3))
+        secax.set_xlabel('time [s]')
 
         if show_trigger:
-            # only show trigger signals that are not all zeros
             color = [colors[key] for key in trig_keys]
-            if x_axis_in_s:
-                event = [(self.get_time(key) - t0)[self.trigger[key]] for key in trig_keys]
-            else:
-                event = [self.timestamp[key][self.trigger[key]] for key in trig_keys]
-            plt.subplot(n_plots, 1, 2)
-            plt.eventplot(event, linelengths=0.8, color=color)
-            plt.gca().legend(trig_keys)
-            plt.ylabel('trigger signals')
-
-        if x_axis_in_s:
-            plt.xlabel('time [s]')
-        else:
-            plt.xlabel('timestamp [2.5 us ticks from midnight]')
+            event = [self.timestamp[key][self.trigger[key]] for key in trig_keys]
+            axs[1, 0].eventplot(event, linelengths=0.8, color=color)
+            axs[1, 0].legend(trig_keys)
+            axs[1, 0].set_ylabel('trigger signals')
 
         plt.show()
 

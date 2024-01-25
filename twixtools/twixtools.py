@@ -67,6 +67,10 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
         keep_syncdata = keep_syncdata_and_acqend
         keep_acqend = keep_syncdata_and_acqend
 
+    if parse_pmu and not keep_syncdata:
+        print('WARNING: parse_pmu is set to True, but keep_syncdata is set to False. PMU data will not be parsed.')
+        parse_pmu = False
+
     if isinstance(infile, str):
         # assume that complete path is given
         # check if filepath contains an extension
@@ -159,12 +163,6 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
         if version_is_ve:
             out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
 
-        if parse_pmu:
-            # parse PMU data
-            pmu = PMU(out[-1]['mdb'])
-            if len(pmu.signal) > 0:
-                out[-1]['pmu'] = pmu
-
         if parse_geometry:
             if not parse_prot:
                 print('WARNING: geometry parsing requires protocol parsing, skipping geometry parsing')
@@ -203,6 +201,12 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
                 break
 
             out[-1]['mdb'].append(mdb)
+
+        if parse_pmu:
+            # parse PMU data
+            pmu = PMU(out[-1]['mdb'])
+            if len(pmu.signal) > 0:
+                out[-1]['pmu'] = pmu
 
         if verbose:
             progress_bar.close()

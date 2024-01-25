@@ -1,7 +1,7 @@
 import numpy as np
 import ctypes
 import struct
-from twixtools.mdh_def import MyStruct
+import matplotlib.pyplot as plt
 
 
 pmu_magic = {
@@ -19,7 +19,7 @@ pmu_magic = {
 magic_pmu = dict(reversed(item) for item in pmu_magic.items())
 
 
-class SeqDataHeader(MyStruct):
+class SeqDataHeader(ctypes.LittleEndianStructure):
     _pack_ = 1
     _fields_ = [
         ("packet_size", ctypes.c_uint32),
@@ -104,6 +104,59 @@ class PMU():
                 f"  .signal: dict of pmu waveforms\n"
                 f"  .trigger: dict of triggers for each channel\n"
                 f"  .timestamp: dict of timestamps for each channel")
+
+    def plot(self, keys=None, show_trigger=True, x_axis_in_s=True):
+
+        if keys is None:
+            keys = list(self.signal.keys())
+        elif isinstance(keys, str):
+            keys = [keys]
+
+        if show_trigger:
+            trig_keys = [key for key in keys if np.any(self.trigger[key])]
+            if len(trig_keys) == 0:
+                print('No trigger signals found')
+                show_trigger = False
+
+        if x_axis_in_s:
+            t0 = self.get_time(keys[0])[0]
+
+        n_plots = 1 + bool(show_trigger)
+
+        plt.subplot(n_plots, 1, 1)
+        colors = dict()
+        for key in keys:
+            if x_axis_in_s:
+                x = self.get_time(key) - t0
+            else:
+                x = self.timestamp[key]
+            plt.plot(x, self.signal[key], label=key)
+            colors[key] = plt.gca().lines[-1].get_color()
+
+        plt.ylabel('normalized signal')
+        plt.legend()
+
+        if show_trigger:
+            # only show trigger signals that are not all zeros
+            color = [colors[key] for key in trig_keys]
+            if x_axis_in_s:
+                event = [(self.get_time(key) - t0)[self.trigger[key]] for key in trig_keys]
+            else:
+                event = [self.timestamp[key][self.trigger[key]] for key in trig_keys]
+            plt.subplot(n_plots, 1, 2)
+            plt.eventplot(event, linelengths=0.8, color=color)
+            plt.gca().legend(trig_keys)
+            plt.ylabel('trigger signals')
+
+        if x_axis_in_s:
+            plt.xlabel('time [s]')
+        else:
+            plt.xlabel('timestamp [2.5 us ticks from midnight]')
+
+        plt.show()
+
+    def get_time(self, key):  # in s
+        return self.timestamp[key] * 2.5e-3
 
     def get_signal(self, key, timestamp):
         if timestamp < self.timestamp[key][0] or timestamp > self.timestamp[key][-1]:

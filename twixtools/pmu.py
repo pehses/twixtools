@@ -119,7 +119,6 @@ class PMU():
                 show_trigger = False
 
         _, axs = plt.subplots(1 + bool(show_trigger), 1, squeeze=False, sharex=True)
-        print('axs.shape = ', axs.shape)
         colors = dict()
         for key in keys:
             axs[0, 0].plot(self.timestamp[key], self.signal[key], label=key)

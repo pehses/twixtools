@@ -61,7 +61,7 @@ def try_cast(value, key):
                 value = int(value)
         except ValueError:
             pass
-    else:  # try to convert everything else to float
+    elif key != "PatientID":  # try to convert everything else except PatientID tags to float
         # obsolete: elif key.startswith('d') or key.startswith('fl'):
         try:
             value = float(value)

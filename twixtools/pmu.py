@@ -42,7 +42,10 @@ class PMUblock():
         self.trigger = dict()
         while i < len(data):
             magic, = struct.unpack('I', data[i:i+4])
-            key = magic_pmu[magic]
+            if magic in magic_pmu:
+                key = magic_pmu[magic]
+            else:
+                key = "UNKNOWN"
             i += 4
             if key == 'END':
                 break

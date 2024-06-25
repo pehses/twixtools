@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 
 
 def to_freqdomain(data, x_in_timedomain=True, axis=-1):
@@ -65,7 +65,7 @@ def calc_regrid_traj(prot, ncol=None):
     # make sure that gr_adc is always positive
     # (rs_traj needs to be strictly monotonic)
     gr_adc = np.maximum(gr_adc, 1e-4)
-    rs_traj = (np.append(0, cumtrapz(gr_adc)) - ncol // 2) / np.sum(gr_adc)
+    rs_traj = (np.append(0, cumulative_trapezoid(gr_adc)) - ncol // 2) / np.sum(gr_adc)
     rs_traj -= np.mean(rs_traj[ncol//2-1:ncol//2+1])
 
     # scale rs_traj by kmax (only works if all slices have same FoV!!!)

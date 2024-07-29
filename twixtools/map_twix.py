@@ -556,7 +556,7 @@ class twix_array():
 
         fft_scale = 1
         if self.flags['apply_fftscale'] and not all(self.fft_scale == 1):
-            corr_factor = self.fft_scale[:, np.newaxis]
+            fft_scale = self.fft_scale[:, np.newaxis]
 
         rawdata_corrfactor = 1
         if self.flags['apply_rawdatacorr'] and not all(self.rawdata_corrfactors == 1):
@@ -565,6 +565,10 @@ class twix_array():
         # now that we have our selection, we can read the data
         # for this, we simply go through all mdb's and fill them in if selected
         # this is not very efficient for large files, but fool-proof
+
+        Lin_sz = self.size['Lin']
+        Par_sz = self.size['Par']
+
         for mdb in self.mdb_list:
 
             Counter = copy.deepcopy(mdb.mdh.Counter)
@@ -582,7 +586,7 @@ class twix_array():
 
             # When the Line Counter (Counter.Lin) is not smaller than its shape,
             # the data will be stored in the front, and may cause problems.
-            if Counter.Lin >= self_shape[-3] or Counter.Par >= self_shape[-5]:
+            if Counter.Lin >= Lin_sz or Counter.Par >= Par_sz:
                 continue
 
             counters = [getattr(Counter, key) for key in Counter_sel]
@@ -694,6 +698,9 @@ class twix_array():
 
 
 def list_indices(seq, item):
+    # make sure that seq is of type list
+    if not isinstance(seq, list):
+        seq = list(seq)  # e.g. convert range object to list
     locs = [seq.index(item, 0)]
     while True:
         try:

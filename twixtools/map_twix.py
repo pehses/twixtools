@@ -552,7 +552,17 @@ class twix_array():
         # now that we have our selection, we can read the data
         # for this, we simply go through all mdb's and fill them in if selected
         # this is not very efficient for large files, but fool-proof
+        mdb_count = 0
         for mdb in self.mdb_list:
+
+            # mdb_count = mdb_count + 1
+            # if mdb_count == len(self.mdb_list):
+            #     print('>>>>>> the last mdb')
+
+            # if mdb.cLin + self.lin_offset > self_shape[-3]:
+            #     print('>>>>>> this line exceeds ky')
+
+            # print('line: %3d; seg: %3d, set: %3d, slice: %3d, flags:'%(mdb.cLin, mdb.cSeg, mdb.cSet, mdb.cSlc), mdb.data.shape, mdb.is_flag_set('LASTSCANINSLICE'))
 
             Counter = copy.deepcopy(mdb.mdh.Counter)
 

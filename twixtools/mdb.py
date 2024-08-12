@@ -42,7 +42,7 @@ class Mdb_base(object):
                 f"    Idb: {self.mdh.Counter.Idb}\n"
                 f"    Idc: {self.mdh.Counter.Idc}\n"
                 f"    Idd: {self.mdh.Counter.Idd}\n"
-                f"    Ide: {self.mdh.Cou__print__nter.Ide}\n"
+                f"    Ide: {self.mdh.Counter.Ide}\n"
                 f"  SliceData:\n"
                 f"    SlicePos:   {self.mdh.SliceData.SlicePos}\n"
                 f"    Quaternion: {self.mdh.SliceData.Quaternion}"

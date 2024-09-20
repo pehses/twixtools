@@ -45,7 +45,8 @@ class Mdb_base(object):
                 f"    Ide: {self.mdh.Counter.Ide}\n"
                 f"  SliceData:\n"
                 f"    SlicePos:   {self.mdh.SliceData.SlicePos}\n"
-                f"    Quaternion: {self.mdh.SliceData.Quaternion}"
+                f"    Quaternion: {self.mdh.SliceData.Quaternion}\n"
+                f"  IceProgramPara: {self.mdh.IceProgramPara}"
                 )
 
     def _get_data_len(self):
@@ -105,6 +106,10 @@ class Mdb_base(object):
     @property
     def cLin(self):
         return self.mdh.Counter.Lin
+    
+    @property
+    def IceProgramPara(self):
+        return self.mdh.IceProgramPara
 
     @property
     def cAve(self):

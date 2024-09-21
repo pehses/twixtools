@@ -1,22 +1,32 @@
-import numpy as np
 import ctypes
+import itertools
 import struct
-import matplotlib.pyplot as plt
+from collections import namedtuple
 
+import matplotlib.pyplot as plt
+import numpy as np
 
 pmu_magic = {
-    "END": 0x01FF0000,
-    "ECG1": 0x01010000,
-    "ECG2": 0x01020000,
-    "ECG3": 0x01030000,
-    "ECG4": 0x01040000,
-    "PULS": 0x01050000,
-    "RESP": 0x01060000,
-    "EXT1": 0x01070000,
-    "EXT2": 0x01080000
+    "END": 0xFFFFFFFF,
+    "ECG1": 0x0,
+    "ECG2": 0x1,
+    "ECG3": 0x2,
+    "ECG4": 0x3,
+    "PULS": 0x4,
+    "RESP": 0x5,
+    "EXT1": 0x6,
+    "EXT2": 0x7,
+    "EVENT": 0x8,
+    "UNKOWNN1": 0x9,
+    "UNKNOWN2": 0xA,
 }
 
-magic_pmu = dict(reversed(item) for item in pmu_magic.items())
+# Create reversed mapping: magic number to key
+magic_pmu = {v: k for k, v in pmu_magic.items()}
+
+Header = namedtuple(
+    "Header", ["timestamp0", "timestamp", "packet_no", "duration", "unknown"]
+)
 
 
 class SeqDataHeader(ctypes.LittleEndianStructure):
@@ -24,71 +34,94 @@ class SeqDataHeader(ctypes.LittleEndianStructure):
     _fields_ = [
         ("packet_size", ctypes.c_uint32),
         ("id", ctypes.c_char * 52),
-        ("swapped", ctypes.c_uint32)
+        ("swapped", ctypes.c_uint32),
     ]
 
 
-class SeqData():
+class SeqData:
     def __init__(self, data):
         self.hdr = SeqDataHeader.from_buffer_copy(data)
-        self.data = data[ctypes.sizeof(self.hdr):ctypes.sizeof(self.hdr) + self.hdr.packet_size]
+        self.data = data[
+            ctypes.sizeof(self.hdr) : ctypes.sizeof(self.hdr) + self.hdr.packet_size
+        ]
 
 
-class PMUblock():
+class PMUblock:
+    HEADER_FORMAT = "<IIIHH"
+    HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
+    MAGIC_SIZE = struct.calcsize("<I")
+    PERIOD_SIZE = struct.calcsize("<I")
+    DATA_SIZE = struct.calcsize("<I")
+
     def __init__(self, data):
-        self.timestamp0, self.timestamp, self.packet_no, self.duration = struct.unpack('IIII', data[:16])
-        i = 16
-        self.signal = dict()
-        self.trigger = dict()
-        while i < len(data):
-            magic, = struct.unpack('I', data[i:i+4])
-            if magic in magic_pmu:
-                key = magic_pmu[magic]
-            else:
-                key = "UNKNOWN"
-            i += 4
-            if key == 'END':
+        self.header = Header(
+            *struct.unpack(self.HEADER_FORMAT, data[: self.HEADER_SIZE])
+        )
+
+        data_iter = itertools.islice(data, self.HEADER_SIZE, None)
+        self.signal = {}
+        self.trigger = {}
+
+        while True:
+            magic_bytes = bytes(itertools.islice(data_iter, self.MAGIC_SIZE))
+            if not magic_bytes:
                 break
-            period, = struct.unpack('I', data[i:i+4])
-            i += 4
-            n_pts = int(self.duration/period)
-            if magic not in magic_pmu:
-                print('unknown magic key', magic, hex(magic))
+
+            magic = struct.unpack("<I", magic_bytes)[0]
+            key = magic_pmu.get(magic, "UNKNOWN")
+            print(f"Magic number: {hex(magic)}, Key: {key}")
+
+            if key == "END":
+                break
+
+            period = struct.unpack(
+                "<I", bytes(itertools.islice(data_iter, self.PERIOD_SIZE))
+            )[0]
+            num_pts = int(self.header.duration / period)
+
+            block_bytes = bytes(itertools.islice(data_iter, self.DATA_SIZE * num_pts))
+            block = np.frombuffer(block_bytes, dtype=np.uint32)
+
+            if key == "EVENT":
+                block = block & 0xFF
+                self.trigger = {k: block == 2 for k in pmu_magic}
             else:
-                block = np.frombuffer(data[i:i+4*n_pts], dtype=np.uint16).reshape((n_pts, 2)).T
-                self.signal[key] = block[0].astype(float) / 4096.
-                self.trigger[key] = block[1].astype(bool)
-            i += 4*n_pts
+                block = block.astype(float) / 4096.0
+
+            self.signal[key] = block
 
     def get_timestamp(self, key):
-        n_pts = len(self.signal[key])
-        return self.timestamp + np.linspace(0, self.duration/10., n_pts, endpoint=False) / 2.5
+        num_pts = len(self.signal[key])
+        return (
+            self.header.timestamp
+            + np.linspace(0, self.header.duration, num_pts, endpoint=False) / 2.5e3
+        )
 
-    def get_time(self, key):  # in s
-        return self.get_timestamp(key) * 2.5e-3
+    def get_time(self, key):  # in seconds
+        return self.get_timestamp(key)
 
 
-class PMU():
+class PMU:
     def __init__(self, mdbs):
         # member variables that will be populated
-        self.signal = dict()
-        self.trigger = dict()
-        self.timestamp = dict()
+        self.signal = {}
+        self.trigger = {}
+        self.timestamp = {}
         self.pmublocks = []  # store blocks
 
         for mdb in mdbs:
-            if not mdb.is_flag_set('SYNCDATA'):
+            if not mdb.is_flag_set("SYNCDATA"):
                 continue
             seqdata = SeqData(mdb.data)
-            if not seqdata.hdr.id.startswith(b'PMU'):
+            if not seqdata.hdr.id.startswith(b"PMU"):
                 continue
-            is_learning_phase = seqdata.hdr.id.startswith(b'PMULearnPhase')
+            is_learning_phase = seqdata.hdr.id.startswith(b"PMULearnPhase")
             block = PMUblock(seqdata.data)
             self.pmublocks.append(block)
             for key in block.signal:
                 pmu_key = key
                 if is_learning_phase:
-                    pmu_key = 'LEARN_' + pmu_key
+                    pmu_key = "LEARN_" + pmu_key
                 if pmu_key not in self.signal:
                     self.signal[pmu_key] = []
                     self.trigger[pmu_key] = []
@@ -103,13 +136,14 @@ class PMU():
 
     def __str__(self):
         """Convert to string, for str()."""
-        return (f"{self.__class__.__module__}.{self.__class__.__qualname__}:\n"
-                f"  .signal: dict of pmu waveforms\n"
-                f"  .trigger: dict of triggers for each channel\n"
-                f"  .timestamp: dict of timestamps for each channel")
+        return (
+            f"{self.__class__.__module__}.{self.__class__.__qualname__}:\n"
+            f"  .signal: dict of pmu waveforms\n"
+            f"  .trigger: dict of triggers for each channel\n"
+            f"  .timestamp: dict of timestamps for each channel"
+        )
 
     def plot(self, keys=None, show_trigger=True):
-
         if keys is None:
             keys = list(self.signal.keys())
         elif isinstance(keys, str):
@@ -118,7 +152,7 @@ class PMU():
         if show_trigger:
             trig_keys = [key for key in keys if np.any(self.trigger[key])]
             if len(trig_keys) == 0:
-                print('No trigger signals found')
+                print("No trigger signals found")
                 show_trigger = False
 
         _, axs = plt.subplots(1 + bool(show_trigger), 1, squeeze=False, sharex=True)
@@ -127,21 +161,23 @@ class PMU():
             axs[0, 0].plot(self.timestamp[key], self.signal[key], label=key)
             colors[key] = axs[0, 0].lines[-1].get_color()
 
-        axs[-1, 0].set_xlabel('timestamp [2.5 us ticks from midnight]')
-        axs[0, 0].set_ylabel('normalized signal')
+        axs[-1, 0].set_xlabel("timestamp [2.5 us ticks from midnight]")
+        axs[0, 0].set_ylabel("normalized signal")
         axs[0, 0].legend()
 
         # add secondary x-axis with time in seconds
         t0 = self.get_time(keys[0])[0]
-        secax = axs[0, 0].secondary_xaxis('top', functions=(lambda x: x*2.5e-3 - t0, lambda x: (x + t0) / 2.5e-3))
-        secax.set_xlabel('time [s]')
+        secax = axs[0, 0].secondary_xaxis(
+            "top", functions=(lambda x: x * 2.5e-3 - t0, lambda x: (x + t0) / 2.5e-3)
+        )
+        secax.set_xlabel("time [s]")
 
         if show_trigger:
             color = [colors[key] for key in trig_keys]
             event = [self.timestamp[key][self.trigger[key]] for key in trig_keys]
             axs[1, 0].eventplot(event, linelengths=0.8, color=color)
             axs[1, 0].legend(trig_keys)
-            axs[1, 0].set_ylabel('trigger signals')
+            axs[1, 0].set_ylabel("trigger signals")
 
         plt.show()
 

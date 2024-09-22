@@ -87,7 +87,9 @@ class PMUblock:
             else:
                 block = block.astype(float)
                 if key in ["ECG1", "ECG2", "ECG3", "ECG4"]:
-                    block -= 2048.0 # units in mV
+                    block -= 2048.0  # units in mV
+                else:
+                    block /= 4095.0
 
             self.signal[key] = block
 

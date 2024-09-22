@@ -85,7 +85,9 @@ class PMUblock:
                 block = block & 0xFF
                 self.trigger = {k: block == 2 for k in pmu_magic}
             else:
-                block = block.astype(float) / 4096.0
+                block = block.astype(float)
+                if key in ["ECG1", "ECG2", "ECG3", "ECG4"]:
+                    block -= 2048.0 # units in mV
 
             self.signal[key] = block
 

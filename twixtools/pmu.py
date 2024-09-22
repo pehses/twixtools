@@ -17,7 +17,7 @@ pmu_magic = {
     "EXT1": 0x6,
     "EXT2": 0x7,
     "EVENT": 0x8,
-    "UNKOWNN1": 0x9,
+    "UNKNOWN1": 0x9,
     "UNKNOWN2": 0xA,
 }
 
@@ -69,7 +69,6 @@ class PMUblock:
 
             magic = struct.unpack("<I", magic_bytes)[0]
             key = magic_pmu.get(magic, "UNKNOWN")
-            print(f"Magic number: {hex(magic)}, Key: {key}")
 
             if key == "END":
                 break
@@ -121,7 +120,7 @@ class PMU:
             for key in block.signal:
                 pmu_key = key
                 if is_learning_phase:
-                    pmu_key = "LEARN_" + pmu_key
+                    pmu_key = f"LEARN_{pmu_key}"
                 if pmu_key not in self.signal:
                     self.signal[pmu_key] = []
                     self.trigger[pmu_key] = []
@@ -151,12 +150,12 @@ class PMU:
 
         if show_trigger:
             trig_keys = [key for key in keys if np.any(self.trigger[key])]
-            if len(trig_keys) == 0:
+            if not trig_keys:
                 print("No trigger signals found")
                 show_trigger = False
 
         _, axs = plt.subplots(1 + bool(show_trigger), 1, squeeze=False, sharex=True)
-        colors = dict()
+        colors = {}
         for key in keys:
             axs[0, 0].plot(self.timestamp[key], self.signal[key], label=key)
             colors[key] = axs[0, 0].lines[-1].get_color()

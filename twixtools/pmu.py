@@ -148,12 +148,12 @@ class PMU:
 
     def plot(self, keys=None, show_trigger=True):
         if keys is None:
-            keys = list(self.signal.keys())
+            keys = ["ECG1", "ECG2", "ECG3", "ECG4", "PULS", "RESP"]
         elif isinstance(keys, str):
             keys = [keys]
 
         if show_trigger:
-            trig_keys = [key for key in keys if np.any(self.trigger[key])]
+            trig_keys = [key for key in keys[::3] if np.any(self.trigger[key])]
             if not trig_keys:
                 print("No trigger signals found")
                 show_trigger = False

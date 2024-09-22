@@ -97,11 +97,11 @@ class PMUblock:
         num_pts = len(self.signal[key])
         return (
             self.header.timestamp
-            + np.linspace(0, self.header.duration, num_pts, endpoint=False) / 2.5e3
+            + np.linspace(0, self.header.duration/10, num_pts, endpoint=False) / 2.5
         )
 
     def get_time(self, key):  # in seconds
-        return self.get_timestamp(key)
+        return self.get_timestamp(key) * 2.5e-3
 
 
 class PMU:
@@ -153,7 +153,7 @@ class PMU:
             keys = [keys]
 
         if show_trigger:
-            trig_keys = [key for key in keys[::3] if np.any(self.trigger[key])]
+            trig_keys = [key for key in keys[:4] if np.any(self.trigger[key])]
             if not trig_keys:
                 print("No trigger signals found")
                 show_trigger = False

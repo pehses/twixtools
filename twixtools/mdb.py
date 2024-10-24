@@ -46,7 +46,9 @@ class Mdb_base(object):
                 f"  SliceData:\n"
                 f"    SlicePos:   {self.mdh.SliceData.SlicePos}\n"
                 f"    Quaternion: {self.mdh.SliceData.Quaternion}\n"
-                f"  IceProgramPara: {self.mdh.IceProgramPara}"
+                f"  IceProgramPara: {self.mdh.IceProgramPara}\n"
+                f"  PMUTimeStamp: {self.mdh.PMUTimeStamp}\n"
+                f"  TimeStamp: {self.mdh.TimeStamp}"
                 )
 
     def _get_data_len(self):
@@ -110,6 +112,14 @@ class Mdb_base(object):
     @property
     def IceProgramPara(self):
         return self.mdh.IceProgramPara
+    
+    @property
+    def PMUTimeStamp(self):
+        return self.mdh.PMUTimeStamp
+    
+    @property
+    def TimeStamp(self):
+        return self.mdh.TimeStamp
 
     @property
     def cAve(self):

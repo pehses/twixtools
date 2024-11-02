@@ -168,7 +168,7 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
                 print('WARNING: geometry parsing requires protocol parsing, skipping geometry parsing')
                 parse_geometry = False
             else:
-                out[-1]['geometry'] = twixtools.geometry.Geometry(out[-1])
+                out[-1]['geometry'] = twixtools.geometry.Geometry.create_for_all_slices(out[-1])
 
         # if data is not requested (headers only)
         if not parse_data:

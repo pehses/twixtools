@@ -32,8 +32,13 @@ class Geometry:
     Based on work from Christian Mirkes and Ali Aghaeifar.
     """
 
-    def __init__(self, twix):
-        self.from_twix(twix)
+    @staticmethod
+    def create_for_all_slices(twix):
+        slices = len(twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"])
+        return [Geometry(twix, n_slice = i) for i in range(slices)]
+
+    def __init__(self, twix, n_slice = None):
+        self.from_twix(twix, n_slice)
 
     def __str__(self):
         return ("Geometry:\n"
@@ -44,7 +49,7 @@ class Geometry:
                 f"  rotmatrix: {self.rotmatrix}\n"
                 f"  voxelsize: {self.voxelsize}")
 
-    def from_twix(self, twix):
+    def from_twix(self, twix, n_slice = None):
         if twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 2:
             self.dims = 2
         elif twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 4:
@@ -52,14 +57,15 @@ class Geometry:
         else:
             self.dims = None
 
-        if len(twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"]) > 1:
+        if n_slice is None and len(twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"]) > 1:
             print("WARNING: Geometry calculations are valid only for the first slice in this multi-slice acquisition.")
+            n_slice = 0
 
         self.fov = [
-            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dReadoutFOV"]
+            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice]["dReadoutFOV"]
             * internal_os,
-            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dPhaseFOV"],
-            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]["dThickness"],
+            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice]["dPhaseFOV"],
+            twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice]["dThickness"],
         ]
 
         self.resolution = [
@@ -71,20 +77,20 @@ class Geometry:
         self.voxelsize = list(np.array(self.fov) / np.array(self.resolution))
 
         self.normal = [0, 0, 0]
-        if "sNormal" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]:
+        if "sNormal" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice]:
             for i, d in enumerate(pcs_directions):
-                self.normal[i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0][
+                self.normal[i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice][
                     "sNormal"
                 ].get(d, self.normal[i])
 
         self.offset = [0, 0, 0]
-        if "sPosition" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0]:
+        if "sPosition" in twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice]:
             for i, d in enumerate(pcs_directions):
-                self.offset[i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0][
+                self.offset[i] = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice][
                     "sPosition"
                 ].get(d, self.offset[i])
 
-        self.inplane_rot = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][0].get(
+        self.inplane_rot = twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"][n_slice].get(
             "dInPlaneRot", 0
         )
 

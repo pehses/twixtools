@@ -163,13 +163,6 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
         if version_is_ve:
             out[-1]['raidfile_hdr'] = raidfile_hdr['entry'][s]
 
-        if parse_geometry:
-            if not parse_prot:
-                print('WARNING: geometry parsing requires protocol parsing, skipping geometry parsing')
-                parse_geometry = False
-            else:
-                out[-1]['geometry'] = twixtools.geometry.Geometry.create_for_all_slices(out[-1])
-
         # if data is not requested (headers only)
         if not parse_data:
             continue
@@ -207,6 +200,13 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
             pmu = PMU(out[-1]['mdb'])
             if len(pmu.signal) > 0:
                 out[-1]['pmu'] = pmu
+
+        if parse_geometry:
+            if not parse_prot:
+                print('WARNING: geometry parsing requires protocol parsing, skipping geometry parsing')
+                parse_geometry = False
+            else:
+                out[-1]['geometry'] = twixtools.geometry.Geometry.create_for_all_slices(out[-1])
 
         if verbose:
             progress_bar.close()

@@ -242,7 +242,7 @@ class twix_array():
         )
 
         # dtype that includes all dims:
-        self.dt_dims = np.dtype([(name, "<u2") for name in self.dim_order])
+        self.dt_dims = np.dtype([(name, "<i2") for name in self.dim_order])
 
         # dtype that only includes counters (no cha & col)
         self.dt_counters = np.dtype([(n, "<u2") for n in self.dim_order[:-2]])

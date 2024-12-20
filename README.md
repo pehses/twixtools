@@ -138,12 +138,12 @@ Before applying the selected compression method(s), lossless compression (gzip) 
 
 ### Additional Requirements
 
-* pyzfp &ge; 0.3.1
+* zfpy &ge; 1.0.0
 * pytables &ge; 3.6.1
 
-The pyzfp and pytables libraries can be installed via pip:
+The zfpy and pytables libraries can be installed via pip:
 
-    pip install pyzfp
+    pip install zfpy
     pip install tables
 
 

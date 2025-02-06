@@ -15,6 +15,7 @@ dependencies = [
   "numpy",
   "scipy",
   "matplotlib",
+  "setuptools",
   "tqdm"
 ]
 

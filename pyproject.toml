@@ -23,13 +23,10 @@ Homepage = "https://github.com/pehses/twixtools"
 
 [project.optional-dependencies]
 test = [
-    "pytest",
-    "tables>=3.6.1",
-    "zfpy>=1.0.0"
+    "pytest"
 ]
 
 [project.scripts]
-twixzip = "twixtools.twixzip:main"
 convert_to_cfl = "utils.convert_to_cfl:main"
 rotate_3Dcfl = "utils.rotate_3Dcfl:main"
 datmeta2json = "utils.datmeta2json:main"

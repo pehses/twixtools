@@ -118,8 +118,7 @@ def convert_to_cfl(twix_filename, out_filename, meas_no, data_type, remove_os, a
     print(f'\n--- Completed in {t//60} min and {t%60} s ---')
 
 
-if __name__ == "__main__":
-
+def main():
     parser = argparse.ArgumentParser(description='convert Siemens twix file to bart cfl file')
     parser.add_argument('infile', type=str, help='Siemens twix input file')
     parser.add_argument('outfile', type=str, help='bart cfl output filename (without extension)')
@@ -136,3 +135,7 @@ if __name__ == "__main__":
         args.data_type = 'all'
 
     convert_to_cfl(args.infile, args.outfile, args.meas_no, args.data_type, args.remove_os, args.rawdatacorr, args.no_average)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "twixtools"
+dynamic = ["version"]
+description = "file reader for Siemens twix(.dat)-files"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Philipp Ehses", email = "philipp.ehses@dzne.de" }]
+keywords = ["twix", "siemens", "mri"]
+requires-python = ">=3.9, <4"
+dependencies = [
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "tqdm"
+]
+
+[project.urls]
+Homepage = "https://github.com/pehses/twixtools"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "tables>=3.6.1",
+    "zfpy>=1.0.0"
+]
+
+[project.scripts]
+twixzip = "twixtools.twixzip:main"
+convert_to_cfl = "utils.convert_to_cfl:main"
+rotate_3Dcfl = "utils.rotate_3Dcfl:main"
+datmeta2json = "utils.datmeta2json:main"
+
+[tool.setuptools]
+packages = [
+    "twixtools",
+    "twixtools.contrib"
+]
+zip-safe = false
+
+[tool.setuptools_scm]
+write_to = "_version.py"
+write_to_template = '__version__ = "{version}"\n'
+version_scheme = "post-release"  # or "wildcard", depending on your use case
+local_scheme = "node-and-date"  # This will include the git hash if no tags are present
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+
+[tool.flake8]
+max-line-length = 127
+max-complexity = 10

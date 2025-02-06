@@ -2,6 +2,7 @@ __pycache__
 *.egg-info
 build/
 dist/
+_version.py
 .idea/
 .ipynb_checkpoints
 .vscode/

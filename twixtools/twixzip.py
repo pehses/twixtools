@@ -711,7 +711,7 @@ class HDF5File(argparse.FileType):
         return returnFile
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="compresses and decompresses Siemens data files (.dat)")
 
@@ -858,3 +858,7 @@ if __name__ == "__main__":
                   ' comp. factor =', inputsz/comprsz,
                   ' reconstructed size =', reconsz)
             print('reconstructed .dat file:', out_name)
+
+
+if __name__ == "__main__":
+    main()

@@ -103,7 +103,7 @@ def main(rawname, inname, outname):
     cfl.writecfl(outname, data)
 
 
-if __name__ == "__main__":
+def main():
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -119,3 +119,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.raw, args.img, args.transformed_img)
+
+
+if __name__ == "__main__":
+    main()

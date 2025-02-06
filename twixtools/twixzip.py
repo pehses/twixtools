@@ -375,7 +375,7 @@ def compress_twix(
         twix = twixtools.read_twix(infile, keep_acqend=True)
 
     import tables
-    import pyzfp
+    import zfpy
 
     # start with default lossless compression settings
     filters = tables.Filters(complevel=5, complib='zlib')
@@ -497,9 +497,9 @@ def compress_twix(
                                 mtx=mtx, ncc=ncc)
                     data = data.flatten()
                     if zfp:
-                        data = pyzfp.compress(
+                        data = zfpy.compress_numpy(
                             data.view('float32'), tolerance=zfp_tol,
-                            precision=zfp_prec, parallel=True)
+                            precision=-1 if zfp_prec is None else zfp_prec)
                         data = np.frombuffer(data, dtype='uint64')
                     else:
                         data = data.view('uint64')
@@ -535,7 +535,7 @@ def compress_twix(
 def reconstruct_twix(infile, outfile=None):
 
     import tables
-    import pyzfp
+    import zfpy
 
     # wip: function takes no parameters, all necessary information needs to be
     # included in hdf file
@@ -620,10 +620,7 @@ def reconstruct_twix(infile, outfile=None):
                     if zfp:
                         data = np.frombuffer(data, dtype='uint8')
                         data = memoryview(data)
-                        data = pyzfp.decompress(
-                            data, [n_data_coils*2*n_data_sampl],
-                            np.dtype('float32'), tolerance=zfp_tol,
-                            precision=zfp_prec)
+                        data = zfpy.decompress_numpy(data)
 
                     data = np.ascontiguousarray(data).view('complex64')
                     data = data.reshape(n_data_coils, n_data_sampl)

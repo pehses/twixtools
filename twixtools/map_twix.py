@@ -374,7 +374,7 @@ class twix_array():
     def par_offset(self):
         offset = 0
         if self.hdr is not None and self.flags['zf_missing_lines'] and self.base_size['Par']//2 > self.kspace_center_lin + 1:
-            offset = self.base_size['Par'] - 2 * self.kspace_center_par
+            offset = int(self.base_size['Par']) - 2 * self.kspace_center_par
         return offset
 
     @property

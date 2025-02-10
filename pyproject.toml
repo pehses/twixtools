@@ -5,12 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "twixtools"
 dynamic = ["version"]
+license = {text = "MIT"}
+authors = [{ name = "Philipp Ehses", email = "philipp.ehses@dzne.de" }]
 description = "file reader for Siemens twix(.dat)-files"
 readme = "README.md"
-license = { file = "LICENSE" }
-authors = [{ name = "Philipp Ehses", email = "philipp.ehses@dzne.de" }]
+requires-python = ">=3.8, <4"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
 keywords = ["twix", "siemens", "mri"]
-requires-python = ">=3.9, <4"
 dependencies = [
   "numpy",
   "scipy",
@@ -21,6 +25,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/pehses/twixtools"
+Issues = "https://github.com/pehses/twixtools/issues"
 
 [project.optional-dependencies]
 test = [
@@ -41,13 +46,9 @@ zip-safe = false
 
 [tool.setuptools_scm]
 write_to = "_version.py"
-write_to_template = '__version__ = "{version}"\n'
-version_scheme = "post-release"  # or "wildcard", depending on your use case
-local_scheme = "node-and-date"  # This will include the git hash if no tags are present
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
 
-[tool.flake8]
 max-line-length = 127
 max-complexity = 10

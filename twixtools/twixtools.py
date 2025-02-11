@@ -263,13 +263,14 @@ def write_twix(scanlist, outfile, version_is_ve=True):
                 # write mdh
                 fid.write(bytearray(mdb.mdh))
                 if version_is_ve:
-                    if mdb.is_flag_set('SYNCDATA')\
-                            or mdb.is_flag_set('ACQEND'):
+                    if mdb.is_flag_set('ACQEND'):
                         fid.write(mdb.data)
-                        if mdb.is_flag_set('ACQEND')\
-                                and mdb is not scan['mdb'][-1]:
+                        if mdb is not scan['mdb'][-1]:
                             print("WARNING: Early ACQEND detected, skipping some data during write.")
                             break
+                    elif mdb.is_flag_set('SYNCDATA'):
+                        #fid.write(mdb.data.tobytes())
+                        fid.write(mdb.data.datastore)
                     else:
                         data = np.atleast_2d(mdb.data)
                         for c in range(data.shape[0]):

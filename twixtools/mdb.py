@@ -3,6 +3,7 @@ import ctypes
 import copy
 
 import twixtools.mdh_def as mdh_def
+from twixtools.seqdata import SeqData
 
 
 class Mdb_base(object):
@@ -300,8 +301,11 @@ class Mdb(Mdb_base):
         self.fid.seek(self.mem_pos + bytes_initial)
         out = self.fid.read(self.dma_len - bytes_initial)
 
-        if self.is_flag_set('ACQEND') or self.is_flag_set('SYNCDATA'):
+        if self.is_flag_set('ACQEND'):
             pass  # nothing to do here
+        elif self.is_flag_set('SYNCDATA'):
+            # transform to seqdata
+            out = SeqData(out)
         else:
             dt = np.dtype(
                 [('skip', bytes, bytes_inter),

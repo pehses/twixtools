@@ -1,5 +1,4 @@
 import numpy as np
-import ctypes
 import struct
 import matplotlib.pyplot as plt
 
@@ -17,21 +16,6 @@ pmu_magic = {
 }
 
 magic_pmu = dict(reversed(item) for item in pmu_magic.items())
-
-
-class SeqDataHeader(ctypes.LittleEndianStructure):
-    _pack_ = 1
-    _fields_ = [
-        ("packet_size", ctypes.c_uint32),
-        ("id", ctypes.c_char * 52),
-        ("swapped", ctypes.c_uint32)
-    ]
-
-
-class SeqData():
-    def __init__(self, data):
-        self.hdr = SeqDataHeader.from_buffer_copy(data)
-        self.data = data[ctypes.sizeof(self.hdr):ctypes.sizeof(self.hdr) + self.hdr.packet_size]
 
 
 class PMUblock():
@@ -79,7 +63,7 @@ class PMU():
         for mdb in mdbs:
             if not mdb.is_flag_set('SYNCDATA'):
                 continue
-            seqdata = SeqData(mdb.data)
+            seqdata = mdb.data
             if not seqdata.hdr.id.startswith(b'PMU'):
                 continue
             is_learning_phase = seqdata.hdr.id.startswith(b'PMULearnPhase')

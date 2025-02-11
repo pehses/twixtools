@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "twixtools"
 dynamic = ["version"]
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 authors = [{ name = "Philipp Ehses", email = "philipp.ehses@dzne.de" }]
 description = "file reader for Siemens twix(.dat)-files"
 readme = "README.md"

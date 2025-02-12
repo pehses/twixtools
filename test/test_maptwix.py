@@ -1,7 +1,6 @@
 import unittest
 import twixtools
 
-
 infile = 'example_data/gre.dat'
 
 

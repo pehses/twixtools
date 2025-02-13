@@ -36,6 +36,7 @@ test = [
 convert_to_cfl = "utils.convert_to_cfl:main"
 rotate_3Dcfl = "utils.rotate_3Dcfl:main"
 datmeta2json = "utils.datmeta2json:main"
+twix_starttime = "utils.twix_starttime.py:main"
 
 [tool.setuptools]
 packages = [

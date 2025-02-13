@@ -6,7 +6,7 @@ def apply_transform(g, data):
     import scipy.ndimage
 
     data = resample(g, data)
-    a = _augment_matrix_dims(np.array(g["rotmatrix"]), len(data.shape))
+    a = _augment_matrix_dims(g.rps_to_xyz(), len(data.shape))
     A = np.array(np.linalg.inv(a))
     output_shape, offset = get_newshape(data.shape, a)
     return scipy.ndimage.affine_transform(

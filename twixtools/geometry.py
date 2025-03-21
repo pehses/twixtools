@@ -50,7 +50,7 @@ def prs2sct_mdb(twix, sliceno):
     # find first mdb which belongs to the slice:
     index = -1
     for i,m in enumerate(twix['mdb']):
-        if m.mdh.Counter.Sli == sliceno:
+        if m.mdh.Counter.Sli == sliceno and m.is_image_scan():
             index = i
             break
 

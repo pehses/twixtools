@@ -182,7 +182,7 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
             # jump to mdh of next scan
             pos += mdb.dma_len
             if verbose:
-                progress_bar.update(mdb.dma_len)
+                progress_bar.update(np.int64(mdb.dma_len))
 
             if not keep_syncdata:
                 if mdb.is_flag_set('SYNCDATA'):
@@ -295,7 +295,7 @@ def write_twix(scanlist, outfile, version_is_ve=True):
                 fid.write(acqend.data)
 
             # update scan_len
-            scan_len.append(fid.tell() - scan_pos[-1])
+            scan_len.append(fid.tell() - int(scan_pos[-1]))
 
             # add sync bytes between scans
             write_sync_bytes(fid)

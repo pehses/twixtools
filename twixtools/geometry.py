@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import numpy as np
-
+import warnings
 internal_os = 2
 pcs_directions = ["dSag", "dCor", "dTra"]
 
@@ -11,10 +11,14 @@ pcs_transformations = {
     "FFS": [[-1, 0, 0], [0, -1, 0], [0, 0, 1]],
 }
 
+
 # scalar first convention - see MDB.
 def quat_to_rotmat(scalar, i, j, k):
     quat = np.array([scalar, i, j, k])
-    assert abs(1 - np.linalg.norm(quat)) < 1e-6
+
+    norm = np.linalg.norm(quat)
+    if abs(1 - norm) < 1e-6:
+        warnings.warn(f"Quaternion is not normalized (norm = {norm})", UserWarning)
 
     r = scalar
 
@@ -23,6 +27,7 @@ def quat_to_rotmat(scalar, i, j, k):
             [ 2 * (i * j + k * r)  , 1 - 2 * (i**2 + k**2), 2 * (j * k - i * r)   ],
             [ 2 * (i * k - j * r)  , 2 * (j * k + i * r)  , 1 - 2 * (i**2 + j**2) ]])
     return mat
+
 
 def parse_slice_order(twix):
     order = None
@@ -37,6 +42,7 @@ def parse_slice_order(twix):
             order.append(val)
     return order
 
+
 def prs2sct_mdb(twix, sliceno):
     """Extract orientation matrix from mdb"""
 
@@ -49,7 +55,7 @@ def prs2sct_mdb(twix, sliceno):
 
     # find first mdb which belongs to the slice:
     index = -1
-    for i,m in enumerate(twix['mdb']):
+    for i, m in enumerate(twix['mdb']):
         if m.mdh.Counter.Sli == sliceno and m.is_image_scan():
             index = i
             break
@@ -62,7 +68,7 @@ def prs2sct_mdb(twix, sliceno):
     mat = quat_to_rotmat(*twix['mdb'][index].mdh.SliceData.Quaternion)
 
     # readout and pe are flipped:
-    mat[:,0:2] *= -1
+    mat[:, :2] *= -1
 
     return mat
 
@@ -88,9 +94,9 @@ class Geometry:
     @staticmethod
     def create_for_all_slices(twix):
         slices = len(twix["hdr"]["MeasYaps"]["sSliceArray"]["asSlice"])
-        return [Geometry(twix, n_slice = i) for i in range(slices)]
+        return [Geometry(twix, n_slice=i) for i in range(slices)]
 
-    def __init__(self, twix, n_slice = None):
+    def __init__(self, twix, n_slice=None):
         self.from_twix(twix, n_slice)
 
     def __str__(self):
@@ -101,7 +107,7 @@ class Geometry:
                 f"  patient_position: {self.patient_position}\n"
                 f"  voxelsize: {self.voxelsize}")
 
-    def from_twix(self, twix, n_slice = None):
+    def from_twix(self, twix, n_slice=None):
         if twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 2:
             self.dims = 2
         elif twix["hdr"]["MeasYaps"]["sKSpace"]["ucDimension"] == 4:

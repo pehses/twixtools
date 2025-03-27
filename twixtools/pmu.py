@@ -19,7 +19,7 @@ magic_pmu = dict(reversed(item) for item in pmu_magic.items())
 
 
 class PMUblock():
-    def __init__(self, data):
+    def __init__(self, data, unknown_keys=set()):
         self.timestamp0, self.timestamp, self.packet_no, self.duration = struct.unpack('IIII', data[:16])
         i = 16
         self.signal = dict()
@@ -29,19 +29,19 @@ class PMUblock():
             if magic in magic_pmu:
                 key = magic_pmu[magic]
             else:
-                key = "UNKNOWN"
+                key = "UNKNOWN_" + str(hex(magic))
+                if magic not in unknown_keys:
+                    print('unknown magic key: ', hex(magic))
+                    unknown_keys.add(magic)
             i += 4
             if key == 'END':
                 break
             period, = struct.unpack('I', data[i:i+4])
             i += 4
             n_pts = int(self.duration/period)
-            if magic not in magic_pmu:
-                print('unknown magic key', magic, hex(magic))
-            else:
-                block = np.frombuffer(data[i:i+4*n_pts], dtype=np.uint16).reshape((n_pts, 2)).T
-                self.signal[key] = block[0].astype(float) / 4096.
-                self.trigger[key] = block[1].astype(bool)
+            block = np.frombuffer(data[i:i+4*n_pts], dtype=np.uint16).reshape((n_pts, 2)).T
+            self.signal[key] = block[0].astype(float) / 4096.
+            self.trigger[key] = block[1].astype(bool)
             i += 4*n_pts
 
     def get_timestamp(self, key):
@@ -59,6 +59,7 @@ class PMU():
         self.trigger = dict()
         self.timestamp = dict()
         self.pmublocks = []  # store blocks
+        self.unknown_pmu_magic = set()
 
         for mdb in mdbs:
             if not mdb.is_flag_set('SYNCDATA'):
@@ -67,7 +68,7 @@ class PMU():
             if not seqdata.hdr.id.startswith(b'PMU'):
                 continue
             is_learning_phase = seqdata.hdr.id.startswith(b'PMULearnPhase')
-            block = PMUblock(seqdata.data)
+            block = PMUblock(seqdata.data, self.unknown_pmu_magic)
             self.pmublocks.append(block)
             for key in block.signal:
                 pmu_key = key

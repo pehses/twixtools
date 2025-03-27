@@ -17,8 +17,8 @@ def quat_to_rotmat(scalar, i, j, k):
     quat = np.array([scalar, i, j, k])
 
     norm = np.linalg.norm(quat)
-    if abs(1 - norm) < 1e-6:
-        warnings.warn(f"Quaternion is not normalized (norm = {norm})", UserWarning)
+    if abs(1 - norm) > 1e-4:
+        warnings.warn(f"Quaternion is not normalized (norm = {norm:.4f})", UserWarning)
 
     r = scalar
 

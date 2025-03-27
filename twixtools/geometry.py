@@ -61,8 +61,8 @@ def prs2sct_mdb(twix, sliceno):
             break
 
     if -1 == index:
-        print(f"No MDB found for slice with chron. index {original_index}, index {sliceno}.")
-        raise RuntimeError("Geom-MDB-Not-Found")
+        print(f"Warning: No MDB found for slice with chron. index {original_index}, index {sliceno}. Returning identity matrix.")
+        return np.eye(3)
 
     # calc rot matrix:
     mat = quat_to_rotmat(*twix['mdb'][index].mdh.SliceData.Quaternion)

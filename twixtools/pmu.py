@@ -28,20 +28,19 @@ class PMUblock():
             magic, = struct.unpack('I', data[i:i+4])
             if magic in magic_pmu:
                 key = magic_pmu[magic]
-            else:
-                key = "UNKNOWN_" + str(hex(magic))
-                if magic not in unknown_keys:
-                    print('unknown magic key: ', hex(magic))
-                    unknown_keys.add(magic)
+                if key == 'END':
+                    break
+            elif magic not in unknown_keys:
+                print('unknown magic key: ', hex(magic))
+                unknown_keys.add(magic)
             i += 4
-            if key == 'END':
-                break
             period, = struct.unpack('I', data[i:i+4])
             i += 4
             n_pts = int(self.duration/period)
-            block = np.frombuffer(data[i:i+4*n_pts], dtype=np.uint16).reshape((n_pts, 2)).T
-            self.signal[key] = block[0].astype(float) / 4096.
-            self.trigger[key] = block[1].astype(bool)
+            if magic in magic_pmu:
+                block = np.frombuffer(data[i:i+4*n_pts], dtype=np.uint16).reshape((n_pts, 2)).T
+                self.signal[key] = block[0].astype(float) / 4096.
+                self.trigger[key] = block[1].astype(bool)
             i += 4*n_pts
 
     def get_timestamp(self, key):

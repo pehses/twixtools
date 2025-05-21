@@ -266,10 +266,13 @@ class PMU():
                 f"  .timestamp: dict of timestamps for each channel\n"
                 f"  .timestamp_trigger: dict of timestamps for the trigger of each channel")
 
-    def plot(self, keys=None, show_trigger=True):
+    def plot(self, keys=None, show_trigger=True, show_learning_phase=False):
 
         if keys is None:
-            keys = list(self.signal.keys())
+            if show_learning_phase:
+                keys = [key for key in self.signal if np.ptp(self.signal[key])>0]
+            else:
+                keys = [key for key in self.signal if not key.startswith('LEARN_') and np.ptp(self.signal[key])>0]
         elif isinstance(keys, str):
             keys = [keys]
 

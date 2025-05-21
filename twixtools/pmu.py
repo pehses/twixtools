@@ -263,7 +263,8 @@ class PMU():
         return (f"{self.__class__.__module__}.{self.__class__.__qualname__}:\n"
                 f"  .signal: dict of pmu waveforms\n"
                 f"  .trigger: dict of triggers for each channel\n"
-                f"  .timestamp: dict of timestamps for each channel")
+                f"  .timestamp: dict of timestamps for each channel\n"
+                f"  .timestamp_trigger: dict of timestamps for the trigger of each channel")
 
     def plot(self, keys=None, show_trigger=True):
 
@@ -281,7 +282,14 @@ class PMU():
         _, axs = plt.subplots(1 + bool(show_trigger), 1, squeeze=False, sharex=True)
         colors = dict()
         for key in keys:
-            axs[0, 0].plot(self.timestamp[key], self.signal[key], label=key)
+            # normalize signal
+            min_signal, max_signal = self.signal[key].min(), self.signal[key].max()
+            if min_signal == max_signal:
+                normalized_signal = np.zeros_like(self.signal[key])
+            else:
+                normalized_signal = (self.signal[key]-min_signal)/(max_signal-min_signal)
+                
+            axs[0, 0].plot(self.timestamp[key], normalized_signal, label=key)
             colors[key] = axs[0, 0].lines[-1].get_color()
 
         axs[-1, 0].set_xlabel('timestamp [2.5 us ticks from midnight]')

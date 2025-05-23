@@ -2,7 +2,7 @@ import numpy as np
 import struct
 import matplotlib.pyplot as plt
 
-events_XA = {
+events_VA = {
     "Patient Table": 0x00000001,
     "ECG1": 0x00000002,
     "ECG2": 0x00000002,
@@ -16,7 +16,7 @@ events_XA = {
     "RespPT": 0x00000080,
 }
 
-events_XA61 = {
+events_VA61 = {
     "Patient Table": 0x00000001,
     "ECG1": 0x00000002,
     "ECG2": 0x00000002,
@@ -45,7 +45,7 @@ pmu_magic = {
     "EXT2": 0x01080000
 }
 
-pmu_magic_XA = {
+pmu_magic_VA = {
     "END": 0xFFFFFFFF,
     "ECG1": 0x00000000,
     "ECG2": 0x00000001,
@@ -60,7 +60,7 @@ pmu_magic_XA = {
     "RespPT": 0x0000000a,
 }
 
-pmu_magic_XA61 = {
+pmu_magic_VA61 = {
     "ECG1": 1,
     "ECG2": 2,
     "ECG3": 3,
@@ -77,8 +77,8 @@ pmu_magic_XA61 = {
 }
 
 magic_pmu = dict(reversed(item) for item in pmu_magic.items())
-magic_pmu_XA = dict(reversed(item) for item in pmu_magic_XA.items())
-magic_pmu_XA61 = dict(reversed(item) for item in pmu_magic_XA61.items())
+magic_pmu_VA = dict(reversed(item) for item in pmu_magic_VA.items())
+magic_pmu_VA61 = dict(reversed(item) for item in pmu_magic_VA61.items())
 
 
 class PMUblock():
@@ -116,8 +116,8 @@ class PMUblock():
     def get_time(self, key):  # in s
         return self.get_timestamp(key) * 2.5e-3
 
-class PMUblockXA():
-    # XA before 61
+class PMUblockVA():
+    # VA before 61
     def __init__(self, data, unknown_keys=set()):
         # Unpack all at once: 4 uint32 values (4 x 4 bytes = 16 bytes)
         self.timestamp0, self.timestamp, self.packet_no, duration_version = struct.unpack('IIII', data[:16])
@@ -131,8 +131,8 @@ class PMUblockXA():
         self.trigger = dict()
         while i < len(data):
             magic, = struct.unpack('I', data[i:i+4])
-            if magic in magic_pmu_XA:
-                key = magic_pmu_XA[magic]
+            if magic in magic_pmu_VA:
+                key = magic_pmu_VA[magic]
                 if key == 'END':
                     break
             elif magic not in unknown_keys:
@@ -142,13 +142,13 @@ class PMUblockXA():
             period, = struct.unpack('I', data[i:i+4])
             i += 4
             n_pts = int(self.duration/period)
-            if magic in magic_pmu_XA:
+            if magic in magic_pmu_VA:
                 block = np.frombuffer(data[i:i+4*n_pts], dtype=np.uint32)
                 if key == 'EVENTS':
                     self.ecg_method = (block >> 8) & 0xF
                     event_type = block & (~0xF00 & 0xFFFFFFFF)
-                    for signal_key in events_XA:
-                        self.trigger[signal_key] = event_type==events_XA[signal_key] 
+                    for signal_key in events_VA:
+                        self.trigger[signal_key] = event_type==events_VA[signal_key] 
                 elif block.dtype == np.uint32:
                     self.signal[key] = block.astype(float) / 4095.
                 else:
@@ -166,7 +166,7 @@ class PMUblockXA():
         return self.get_timestamp(key) * 2.5e-3
 
 
-class PMUblockXA61():
+class PMUblockVA61():
     def __init__(self, data, unknown_keys=set()):
         # packet header: 16 bytes including 2 for the version
         version, size_header, _, size_full_packet, self.timestamp = struct.unpack(
@@ -181,8 +181,8 @@ class PMUblockXA61():
             # read base signal header: 16 bytes
             # get magic key and size info
             magic, added_bytes, size_one, size_data, nb_samples = struct.unpack('BBHHH', data[i:i+8])
-            if magic in magic_pmu_XA61:
-                key = magic_pmu_XA61[magic]
+            if magic in magic_pmu_VA61:
+                key = magic_pmu_VA61[magic]
             elif magic not in unknown_keys:
                 print('unknown magic key: ', hex(magic))
                 unknown_keys.add(magic)
@@ -194,11 +194,11 @@ class PMUblockXA61():
             # read extended signal header
             ref_value, divisor, offset = struct.unpack('ddd', data[i:i+24])
             i+=24
-            if magic in magic_pmu_XA61:
+            if magic in magic_pmu_VA61:
                 block = np.frombuffer(data[i:i+size_one*nb_samples], dtype=np.float32)
                 if magic == 49:
-                    for signal_key in events_XA61:
-                        self.trigger[signal_key] = block==events_XA61[signal_key]
+                    for signal_key in events_VA61:
+                        self.trigger[signal_key] = block==events_VA61[signal_key]
                 else:
                     self.signal[key] = block.astype(float) * divisor + offset
             i += size_one*nb_samples + added_bytes
@@ -233,9 +233,9 @@ class PMU():
             is_learning_phase = seqdata.hdr.id.startswith(b'PMULearnPhase')
             if syngo_version is not None and syngo_version.startswith('XA'):
                 if int(syngo_version[2:])>= 61:
-                    block = PMUblockXA61(seqdata.data, self.unknown_pmu_magic)
+                    block = PMUblockVA61(seqdata.data, self.unknown_pmu_magic)
                 else:
-                    block = PMUblockXA(seqdata.data, self.unknown_pmu_magic)
+                    block = PMUblockVA(seqdata.data, self.unknown_pmu_magic)
             else:
                 block = PMUblock(seqdata.data, self.unknown_pmu_magic)
             self.pmublocks.append(block)

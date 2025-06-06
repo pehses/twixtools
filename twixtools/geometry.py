@@ -32,14 +32,12 @@ def quat_to_rotmat(scalar, i, j, k):
 def parse_slice_order(twix):
     order = None
     if '-' != twix['hdr']['Config']['chronSliceIndices'][0]:
-        order = []
-        for x in twix['hdr']['Config']['chronSliceIndices']:
-            if len(order) == int(twix['hdr']['MeasYaps']['sSliceArray']['lSize']):
-                break
-            if x == ' ':
-                continue
-            val = int(x)
-            order.append(val)
+        len_order = int(twix['hdr']['MeasYaps']['sSliceArray']['lSize'])
+        order = [
+            int(s) 
+            for s in twix['hdr']['Config']['chronSliceIndices'].split(' ') 
+            if s.isdigit()
+        ][:len_order]
     return order
 
 

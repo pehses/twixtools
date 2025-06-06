@@ -35,3 +35,10 @@ def idea_version_check(f):
     f.seek(prev_pos)
 
     return version_is_ve, NScans
+
+def get_syngo_version(hdr):
+    """
+    Get the scanner version from the header file.
+    """
+    syngo_version_str = hdr['Dicom']['SoftwareVersions']
+    return syngo_version_str.split(' ')[-1]

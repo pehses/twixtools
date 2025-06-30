@@ -1,7 +1,8 @@
 import numpy as np
-import pkg_resources
-scipy_version = pkg_resources.get_distribution("scipy").version
-if scipy_version >= '1.14.0':
+from importlib.metadata import version
+from packaging.version import parse as parse_version
+scipy_version = version("scipy")
+if parse_version(scipy_version) >= parse_version("1.14.0"):
     from scipy.integrate import cumulative_trapezoid as cumtrapz
 else:
     from scipy.integrate import cumtrapz

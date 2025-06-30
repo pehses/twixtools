@@ -33,15 +33,16 @@ test = [
 ]
 
 [project.scripts]
-convert_to_cfl = "utils.convert_to_cfl:main"
-rotate_3Dcfl = "utils.rotate_3Dcfl:main"
-datmeta2json = "utils.datmeta2json:main"
-twix_starttime = "utils.twix_starttime.py:main"
+convert_to_cfl = "twixtools.utils.convert_to_cfl:main"
+rotate_3Dcfl = "twixtools.utils.rotate_3Dcfl:main"
+datmeta2json = "twixtools.utils.datmeta2json:main"
+twix_starttime = "twixtools.utils.twix_starttime:main"
 
 [tool.setuptools]
 packages = [
     "twixtools",
-    "twixtools.contrib"
+    "twixtools.contrib",
+    "twixtools.utils"
 ]
 zip-safe = false
 

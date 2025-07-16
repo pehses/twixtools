@@ -197,7 +197,7 @@ def read_twix(infile, include_scans=None, parse_prot=True, parse_data=True, pars
 
         if parse_pmu:
             # parse PMU data
-            pmu = PMU(out[-1]['mdb'])
+            pmu = PMU(out[-1]['mdb'], helpers.get_syngo_version(out[-1]['hdr']))
             if len(pmu.signal) > 0:
                 out[-1]['pmu'] = pmu
 

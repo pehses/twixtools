@@ -36,6 +36,7 @@ The function returns a list of individual measurements (of length >=1). The last
 * 'hdr': dict of parsed protocol header strings (each dict element contains another dict with protocol information)
 * 'hdr_str': dict of original protocol header strings (divided into different protocol types)
   - note that this is the protocol information that is used for twix file writing (by `write_twix`), so make sure to make necessary adjustments here and not in ['hdr']
+* 'geometry': Geometry (slice position and orientation) information
 * 'pmu': physiological (PMU) data (if available and parse_pmu is set to True)
 * ('raidfile_hdr': required for twix file writing, otherwise of little importance)
 
@@ -45,8 +46,14 @@ Each invididual 'mdb' in the list of mdbs consists of a data and a header (line 
 ```python
 mdb = multi_twix[-1]['mdb'][0] # first mdb element of last measurement
 mdb.data # data of first mdb (may or may not be imaging data)
-mdb.mdh # full miniheader information stored as a numpy dtype object
- ```
+mdb.mdh # full miniheader information stored in a ctypes structure
+```
+
+To print an overview of an mdb, you can just call python's print function on it:
+
+```python
+print(mdb)
+```
 
 Different data types can be distinguished by returning a list of active flags, or by directly checking whether the data is assumed to be from an imaging scan (and not from a calibration scan such as a phase correction scan or a noise measurement):
 
@@ -62,7 +69,7 @@ mdb.cPar   # returns partition number
 mdb.c<tab> # with line completion enabled, this should give you a list of all counters
 ```
 
-The full minidata header (mdh) information is stored in a `mdb.mdh` special numpy dtype object. You can print a list of its entry names by printing `mdb.mdh.dtype.names`.
+The full minidata header (mdh) information is stored in a `mdb.mdh` ctypes structure of type 'Scan_header'. You can print a list of its entry names by printing `mdb.mdh.__class__.__dict__`.
 
 
 ### Example code
